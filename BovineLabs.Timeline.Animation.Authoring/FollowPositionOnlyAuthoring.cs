@@ -6,6 +6,15 @@ namespace BovineLabs.Timeline.Animation.Authoring
     public class FollowPositionOnlyAuthoring : MonoBehaviour
     {
         public Transform target;
+        
+        private void LateUpdate()
+        {
+            if (target == null) return;
+            transform.localPosition =
+                transform.parent != null
+                    ? transform.parent.InverseTransformPoint(target.position)
+                    : target.position;
+        }
 
         private class FollowPositionOnlyAuthoringBaker : Baker<FollowPositionOnlyAuthoring>
         {
