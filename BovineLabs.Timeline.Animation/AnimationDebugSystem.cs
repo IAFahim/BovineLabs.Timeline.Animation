@@ -9,6 +9,7 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(TimelineAnimationUnificationSystem))]
     [RequireMatchingQueriesForUpdate]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct AnimationDebugSystem : ISystem
     {
         [BurstCompile]

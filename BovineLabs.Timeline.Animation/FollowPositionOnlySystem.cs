@@ -8,6 +8,7 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateBefore(typeof(LocalToWorldSystem))]
     [BurstCompile]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct FollowPositionOnlySystem : ISystem
     {
         [BurstCompile]

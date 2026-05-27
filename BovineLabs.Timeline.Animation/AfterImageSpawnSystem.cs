@@ -9,6 +9,7 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(TimelineAnimationUnificationSystem))]
     [UpdateBefore(typeof(AnimationProcessSystem))]
+    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct AfterImageSpawnSystem : ISystem
     {
         private struct SpawnRequest
