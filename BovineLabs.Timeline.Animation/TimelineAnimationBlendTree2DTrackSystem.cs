@@ -36,16 +36,12 @@ namespace BovineLabs.Timeline.Animation
 
             /// <summary>Clip weight from ClipWeight component or default 1.0.</summary>
             public float Weight;
-            public uint SortKey;
         }
 
-        // Weight threshold below which a clip/entry is considered fully faded out.
         private const float WeightEpsilon = 0.0001f;
 
-        // Minimum clip duration guard to avoid division by zero.
         private const float MinDuration = 0.001f;
 
-        // Small epsilon for direction normalization safety.
         private const float DirectionEpsilon = 0.0001f;
 
         [BurstCompile]
@@ -100,14 +96,12 @@ namespace BovineLabs.Timeline.Animation
                 FallbackOverrideLookup = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
                 DefaultFallbackLookup = state.GetUnsafeComponentLookup<DefaultBlendGroupFallback>(true),
                 BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(false),
-                PlaybackStateLookup = state.GetUnsafeBufferLookup<BlendTreePlaybackStateElement>(),
-                FallbackLookup = state.GetUnsafeComponentLookup<FallbackBlend>(),
+                PlaybackStateLookup = state.GetBufferLookup<BlendTreePlaybackStateElement>(false),
+                FallbackLookup = state.GetComponentLookup<FallbackBlend>(false),
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
-                IsScrubbing = isScrubbing // ADDED
+                IsScrubbing = isScrubbing
             }.Schedule(targetEntities, 64, state.Dependency);
 
-            // Bug #14: Reset FallbackBlend to DefaultBlendGroupFallback for entities
-            // that had no active blend-tree clips this frame.
             state.Dependency = new ResetStaleFallbackJob
             {
                 TargetEntities = targetEntities.AsDeferredJobArray()
@@ -183,7 +177,6 @@ namespace BovineLabs.Timeline.Animation
                     Track = track,
                     AbsoluteTime = (float)localTime.Value,
                     Direction = directionData.Value,
-                    SortKey = (uint)directionData.ClipHash.GetHashCode(),
                     Weight = weight
                 });
             }
@@ -212,16 +205,12 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public UnsafeComponentLookup<TrackFallbackOverride> FallbackOverrideLookup;
             [ReadOnly] public UnsafeComponentLookup<DefaultBlendGroupFallback> DefaultFallbackLookup;
 
-            // Safety: Each thread processes a distinct target entity via IJobParallelForDefer
-            // over the unique-key list. No two threads write the same entity's buffers,
-            // so NativeDisableParallelForRestriction is safe here.
             [NativeDisableParallelForRestriction] public BufferLookup<BlendGroupEntry> BlendGroupLookup;
 
             [NativeDisableParallelForRestriction]
-            public UnsafeBufferLookup<BlendTreePlaybackStateElement> PlaybackStateLookup;
+            public BufferLookup<BlendTreePlaybackStateElement> PlaybackStateLookup;
 
-            // Safety: See above — per-entity uniqueness guarantee from IJobParallelForDefer.
-            [NativeDisableParallelForRestriction] public UnsafeComponentLookup<FallbackBlend> FallbackLookup;
+            [NativeDisableParallelForRestriction] public ComponentLookup<FallbackBlend> FallbackLookup;
 
             public float GlobalDeltaTime;
             public bool IsScrubbing;
@@ -237,26 +226,12 @@ namespace BovineLabs.Timeline.Animation
                 var hasFallbackCandidate = false;
 
                 const int stackTrackCapacity = 128;
-                // Safety: stackalloc fallback to heap list if exceeded. 128 tracks per entity is
-                // extremely generous; exceeding it means an unusual authoring setup.
                 var processedTracks = stackalloc PerTrackBlend[stackTrackCapacity];
                 var processedTrackCount = 0;
                 var fallbackToMap = false;
 
-                var clipList = new UnsafeList<TrackClipData>(16, Allocator.Temp);
                 if (ClipDataMap.TryGetFirstValue(targetEntity, out var clipData, out var it))
-                {
-                    do { clipList.Add(clipData); }
-                }
-                clipList.Dispose();
-                }
-                
-                // Sort by SortKey for determinism
-                clipList.Sort(new TrackClipDataComparer());
-
-                for (var cli = 0; cli < clipList.Length; cli++)
-                {
-                    clipData = clipList[cli];
+                    do
                     {
                         var blendIndex = -1;
                         for (var i = 0; i < processedTrackCount; i++)
@@ -291,9 +266,7 @@ namespace BovineLabs.Timeline.Animation
                         }
 
                         processedTracks[blendIndex] = blend;
-                    }
-                }
-                clipList.Dispose();
+                    } while (ClipDataMap.TryGetNextValue(out clipData, ref it));
 
                 if (fallbackToMap)
                 {
@@ -306,7 +279,6 @@ namespace BovineLabs.Timeline.Animation
                         ProcessTrackBlend(targetEntity, processedTracks[i], ref bestFallbackLayer, ref bestFallback,
                             ref hasFallbackCandidate);
 
-                    // Bug #7: Cleanup orphan playback states for tracks no longer active
                     CleanupOrphanPlaybackStates(targetEntity, processedTracks, processedTrackCount);
                 }
 
@@ -365,20 +337,8 @@ namespace BovineLabs.Timeline.Animation
             {
                 var processedTracks = new UnsafeList<PerTrackBlend>(16, Allocator.Temp);
 
-                var clipList = new UnsafeList<TrackClipData>(16, Allocator.Temp);
                 if (ClipDataMap.TryGetFirstValue(targetEntity, out var clipData, out var it))
-                {
-                    do { clipList.Add(clipData); }
-                }
-                clipList.Dispose();
-                }
-                
-                // Sort by SortKey for determinism
-                clipList.Sort(new TrackClipDataComparer());
-
-                for (var cli = 0; cli < clipList.Length; cli++)
-                {
-                    clipData = clipList[cli];
+                    do
                     {
                         var blendIndex = -1;
                         for (var i = 0; i < processedTracks.Length; i++)
@@ -407,15 +367,14 @@ namespace BovineLabs.Timeline.Animation
                         }
 
                         processedTracks[blendIndex] = blend;
-                    }
-                }
-                clipList.Dispose();
+                    } while (ClipDataMap.TryGetNextValue(out clipData, ref it));
+
+                processedTracks.Sort();
 
                 for (var i = 0; i < processedTracks.Length; i++)
                     ProcessTrackBlend(targetEntity, processedTracks[i], ref bestFallbackLayer, ref bestFallback,
                         ref hasFallbackCandidate);
 
-                // Bug #7: Cleanup orphan playback states for tracks no longer active
                 CleanupOrphanPlaybackStatesHeap(targetEntity, ref processedTracks);
                 processedTracks.Dispose();
             }
@@ -435,10 +394,6 @@ namespace BovineLabs.Timeline.Animation
                     hasFallbackCandidate = true;
                 }
 
-                // Note: saturate caps total timeline weight to [0,1]. When multiple clips
-                // overlap with different weights, this discards excess magnitude rather than
-                // normalizing. This is intentional — overlapping blend-tree clips are rare,
-                // and saturating produces more predictable behavior than dividing by the sum.
                 var totalWeight = math.saturate(blend.TotalWeight);
                 var blendedDirection = new float2(blend.DirectionX, blend.DirectionY) /
                                        math.max(DirectionEpsilon, blend.TotalWeight);
@@ -522,7 +477,7 @@ namespace BovineLabs.Timeline.Animation
                 float totalTimelineWeight,
                 float absoluteTime,
                 in BlendAnimationTree2DTrackData trackData,
-                UnsafeDynamicBuffer<BlendGroupEntry> blendGroupBuffer,
+                DynamicBuffer<BlendGroupEntry> blendGroupBuffer,
                 NativeArray<BlobAssetReference<AnimationClipBlob>> blendTreeClips,
                 NativeArray<ScriptedAnimator.BlendTree2DMotionElement> blendTreePositions)
             {
@@ -594,12 +549,6 @@ namespace BovineLabs.Timeline.Animation
                     stateBuffer[stateIdx] = ps;
                 }
 
-                // Compute per-entry offsets from track data
-                // Only strip start offset when offsets are actually authored,
-                // otherwise the character drops to world origin
-                // AvatarMask: only apply when authoring explicitly enables it.
-                // When ApplyAvatarMask is false, AvatarMaskHash is default (zero) — guaranteed
-                // by the baker in BlendTree2DTrack.Bake.
                 var avatarMaskHash = trackData.ApplyAvatarMask ? trackData.AvatarMaskHash : default;
                 var trackPosOffset = trackData.TrackPositionOffset;
                 var trackRotOffset = trackData.TrackRotationOffset;
@@ -623,8 +572,6 @@ namespace BovineLabs.Timeline.Animation
                             AvatarMaskHash = avatarMaskHash,
                             BlendMode = AnimationBlendingMode.Override,
                             MotionId = ComputeMotionId(trackEntity, trackData.LayerIndex, clipHash),
-
-                            // Track-level offsets applied to all blend tree entries
                             PositionOffset = trackPosOffset,
                             RotationOffset = trackRotOffset,
                             RemoveStartOffset = hasOffsets,
@@ -636,18 +583,14 @@ namespace BovineLabs.Timeline.Animation
                 internalWeights.Dispose();
             }
 
-                    public static uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
-        {
-            var h = new xxHash3.StreamingState(0x1337);
-            h.Update(track.Index);
-            h.Update(track.Version);
-            h.Update(layerIndex);
-            h.Update(clipHash.Value.x);
-            h.Update(clipHash.Value.y);
-            h.Update(clipHash.Value.z);
-            h.Update(clipHash.Value.w);
-            return (uint)(h.Digest() & 0xFFFFFFFF);
-        }
+            private uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
+            {
+                var hash = (uint)track.Index;
+                hash = (hash * 31) ^ (uint)track.Version;
+                hash = (hash * 31) ^ (uint)layerIndex;
+                hash = (hash * 31) ^ (uint)clipHash.GetHashCode();
+                return hash;
+            }
 
             /// <summary>
             ///     Removes BlendTreePlaybackStateElement entries for tracks that are no longer active.
@@ -715,12 +658,10 @@ namespace BovineLabs.Timeline.Animation
             public void Execute(Entity entity, ref FallbackBlend fallback,
                 in DefaultBlendGroupFallback defaults)
             {
-                // Check if this entity was already processed by the main job
                 for (var i = 0; i < TargetEntities.Length; i++)
                     if (TargetEntities[i] == entity)
-                        return; // Already handled
+                        return;
 
-                // Not processed — reset to default fallback
                 fallback = new FallbackBlend
                 {
                     ClipHash = defaults.ClipHash,
@@ -738,13 +679,7 @@ namespace BovineLabs.Timeline.Animation
             }
         }
 
-        
-        private struct TrackClipDataComparer : System.Collections.Generic.IComparer<TrackClipData>
-        {
-            public int Compare(TrackClipData x, TrackClipData y) => x.SortKey.CompareTo(y.SortKey);
-        }
-    
-        private struct PerTrackBlend
+        private struct PerTrackBlend : System.IComparable<PerTrackBlend>
         {
             public Entity TrackEntity;
             public float DirectionX;
@@ -752,6 +687,13 @@ namespace BovineLabs.Timeline.Animation
             public float TotalWeight;
             public float BestWeight;
             public float AbsoluteTime;
+
+            public int CompareTo(PerTrackBlend other)
+            {
+                var cmp = TrackEntity.Index.CompareTo(other.TrackEntity.Index);
+                if (cmp != 0) return cmp;
+                return TrackEntity.Version.CompareTo(other.TrackEntity.Version);
+            }
         }
     }
 }

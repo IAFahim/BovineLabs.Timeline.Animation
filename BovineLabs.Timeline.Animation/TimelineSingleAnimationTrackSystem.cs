@@ -107,7 +107,6 @@ namespace BovineLabs.Timeline.Animation
                     normalizedTime = math.saturate(timeInSeconds / duration);
                 }
 
-                // Apply mathematical offset logic (Track Offset + Clip Offset)
                 var finalPosOffset = trackData.TrackPositionOffset +
                                      math.rotate(trackData.TrackRotationOffset, clipData.PositionOffset);
                 var finalRotOffset = math.mul(trackData.TrackRotationOffset, clipData.RotationOffset);
@@ -131,7 +130,7 @@ namespace BovineLabs.Timeline.Animation
 
                     public static uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
         {
-            var h = new xxHash3.StreamingState(0x1337);
+            var h = new xxHash3.StreamingState(true, 0x1337);
             h.Update(track.Index);
             h.Update(track.Version);
             h.Update(layerIndex);
@@ -139,7 +138,7 @@ namespace BovineLabs.Timeline.Animation
             h.Update(clipHash.Value.y);
             h.Update(clipHash.Value.z);
             h.Update(clipHash.Value.w);
-            return (uint)(h.Digest() & 0xFFFFFFFF);
+            return h.DigestHash64().x;
         }
         }
 

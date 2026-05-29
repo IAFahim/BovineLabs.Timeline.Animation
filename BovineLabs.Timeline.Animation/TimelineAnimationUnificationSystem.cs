@@ -13,10 +13,8 @@ namespace BovineLabs.Timeline.Animation
     [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationUnificationSystem : ISystem
     {
-        // Weight threshold below which a clip/entry is considered fully faded out.
         private const float WeightEpsilon = 0.0001f;
 
-        // Minimum clip duration guard to avoid division by zero.
         private const float MinDuration = 0.001f;
 
         public void OnCreate(ref SystemState state)
@@ -49,7 +47,7 @@ namespace BovineLabs.Timeline.Animation
         {
             [ReadOnly] public NativeHashMap<Hash128, BlobAssetReference<AnimationClipBlob>> AnimDB;
             public float DeltaTime;
-            public bool IsScrubbing; // ADDED
+            public bool IsScrubbing;
 
             public void Execute(
                 Entity entity,
@@ -147,7 +145,6 @@ namespace BovineLabs.Timeline.Animation
                         clipBlob.IsCreated)
                     {
                         var duration = math.max(MinDuration, clipBlob.Value.length);
-                        // Safe normalized time increment
                         s.NormalizedTime += (IsScrubbing ? 0 : DeltaTime) / duration;
                         s.NormalizedTime = math.frac(s.NormalizedTime);
                     }
@@ -176,7 +173,6 @@ namespace BovineLabs.Timeline.Animation
 
                         var duration = math.max(MinDuration, fallbackClip.Value.length);
 
-                        // Hold mode: stop accumulating once past clip end (don't wrap)
                         if (fallbackData.PlaybackMode == FallbackPlaybackMode.Hold)
                         {
                             if (timer.FallbackAccumulatedTime < 1f)

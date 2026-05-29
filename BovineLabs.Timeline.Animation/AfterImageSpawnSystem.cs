@@ -38,7 +38,6 @@ namespace BovineLabs.Timeline.Animation
             var requests = new NativeList<SpawnRequest>(8, Allocator.Temp);
             var atpPool = new NativeList<AnimationToProcessComponent>(64, Allocator.Temp);
 
-            // ── Phase 1: read everything BEFORE any structural change ──
             foreach (var (clipData, binding, clip, entity) in
                      SystemAPI.Query<RefRO<AfterImageClipData>, RefRO<TrackBinding>, RefRO<Clip>>()
                          .WithAll<ClipActive>()
@@ -81,7 +80,6 @@ namespace BovineLabs.Timeline.Animation
                 });
             }
 
-            // ── Phase 2: structural changes — all reads are finished ──
             for (var i = 0; i < requests.Length; i++)
             {
                 var req = requests[i];

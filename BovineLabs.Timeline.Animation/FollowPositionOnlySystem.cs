@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.Transforms;
 
 namespace BovineLabs.Timeline.Animation
@@ -50,17 +51,29 @@ namespace BovineLabs.Timeline.Animation
             public void Execute(Entity entity, in FollowPositionOnly follow, ref LocalTransform lt)
             {
                 var target = follow.TargetBone;
+                float3 targetPos;
 
-                // Rule 1.1: Prefer LocalTransform for unparented entities
                 if (LocalTransformLookup.TryGetComponent(target, out var targetLt) && !ParentLookup.HasComponent(target))
                 {
-                    lt.Position = targetLt.Position;
+                    targetPos = targetLt.Position;
+                }
+                else if (LocalToWorldLookup.TryGetComponent(target, out var targetL2W))
+                {
+                    targetPos = targetL2W.Position;
+                }
+                else
+                {
                     return;
                 }
 
-                // Fallback to LocalToWorld for parented entities
-                if (LocalToWorldLookup.TryGetComponent(target, out var targetL2W))
-                    lt.Position = targetL2W.Position;
+                if (ParentLookup.TryGetComponent(entity, out var selfParent) && LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W))
+                {
+                    lt.Position = Unity.Mathematics.math.transform(Unity.Mathematics.math.inverse(parentL2W.Value), targetPos);
+                }
+                else
+                {
+                    lt.Position = targetPos;
+                }
             }
         }
     }
