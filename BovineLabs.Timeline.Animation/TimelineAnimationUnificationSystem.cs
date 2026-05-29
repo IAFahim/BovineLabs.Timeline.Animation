@@ -133,10 +133,8 @@ namespace BovineLabs.Timeline.Animation
                     }
                     else
                     {
-                        if (s.CurrentWeight < s.TargetWeight)
-                            s.CurrentWeight = math.min(s.TargetWeight, s.CurrentWeight + speed * DeltaTime);
-                        else if (s.CurrentWeight > s.TargetWeight)
-                            s.CurrentWeight = math.max(s.TargetWeight, s.CurrentWeight - speed * DeltaTime);
+                        var lerpT = speed <= 0.0001f ? 1f : (1f - math.exp(-speed * DeltaTime));
+                        s.CurrentWeight = math.lerp(s.CurrentWeight, s.TargetWeight, lerpT);
                     }
 
                     if (s.CurrentWeight <= WeightEpsilon && s.TargetWeight <= WeightEpsilon)

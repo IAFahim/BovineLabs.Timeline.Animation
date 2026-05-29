@@ -123,6 +123,7 @@ namespace BovineLabs.Timeline.Animation
                 var data = state.EntityManager.GetComponentData<AfterImageClipData>(entities[i]);
                 if (data.SpawnedEntity != Entity.Null)
                 {
+                    if (state.EntityManager.Exists(data.SpawnedEntity)) state.EntityManager.DestroyEntity(data.SpawnedEntity);
                     data.SpawnedEntity = Entity.Null;
                     state.EntityManager.SetComponentData(entities[i], data);
                 }

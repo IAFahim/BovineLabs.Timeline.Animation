@@ -11,17 +11,30 @@ namespace BovineLabs.Timeline.Animation
     [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
     public partial struct FollowPositionOnlySystem : ISystem
     {
+        private ComponentLookup<LocalTransform> _localTransformLookup;
+        private ComponentLookup<LocalToWorld> _localToWorldLookup;
+        private ComponentLookup<Parent> _parentLookup;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
+            _localTransformLookup = state.GetComponentLookup<LocalTransform>(true);
+            _localToWorldLookup = state.GetComponentLookup<LocalToWorld>(true);
+            _parentLookup = state.GetComponentLookup<Parent>(true);
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            _localTransformLookup.Update(ref state);
+            _localToWorldLookup.Update(ref state);
+            _parentLookup.Update(ref state);
+
             var job = new FollowPositionJob
             {
-                TargetL2WLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true)
+                LocalTransformLookup = _localTransformLookup,
+                LocalToWorldLookup = _localToWorldLookup,
+                ParentLookup = _parentLookup
             };
 
             job.ScheduleParallel();
@@ -30,13 +43,23 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         public partial struct FollowPositionJob : IJobEntity
         {
-            [ReadOnly] public ComponentLookup<LocalToWorld> TargetL2WLookup;
+            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
+            [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [ReadOnly] public ComponentLookup<Parent> ParentLookup;
 
             public void Execute(Entity entity, in FollowPositionOnly follow, ref LocalTransform lt)
             {
-                if (TargetL2WLookup.TryGetComponent(follow.TargetBone, out var targetL2W))
-                    // Only update LocalTransform.Position; TransformSystemGroup derives LocalToWorld from it.
-                    // Writing LocalToWorld directly would race with TransformSystemGroup.
+                var target = follow.TargetBone;
+
+                // Rule 1.1: Prefer LocalTransform for unparented entities
+                if (LocalTransformLookup.TryGetComponent(target, out var targetLt) && !ParentLookup.HasComponent(target))
+                {
+                    lt.Position = targetLt.Position;
+                    return;
+                }
+
+                // Fallback to LocalToWorld for parented entities
+                if (LocalToWorldLookup.TryGetComponent(target, out var targetL2W))
                     lt.Position = targetL2W.Position;
             }
         }

@@ -36,6 +36,7 @@ namespace BovineLabs.Timeline.Animation
 
             /// <summary>Clip weight from ClipWeight component or default 1.0.</summary>
             public float Weight;
+            public uint SortKey;
         }
 
         // Weight threshold below which a clip/entry is considered fully faded out.
@@ -98,7 +99,7 @@ namespace BovineLabs.Timeline.Animation
                 MotionBufferLookup = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true),
                 FallbackOverrideLookup = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
                 DefaultFallbackLookup = state.GetUnsafeComponentLookup<DefaultBlendGroupFallback>(true),
-                BlendGroupLookup = state.GetUnsafeBufferLookup<BlendGroupEntry>(),
+                BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(false),
                 PlaybackStateLookup = state.GetUnsafeBufferLookup<BlendTreePlaybackStateElement>(),
                 FallbackLookup = state.GetUnsafeComponentLookup<FallbackBlend>(),
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
@@ -182,6 +183,7 @@ namespace BovineLabs.Timeline.Animation
                     Track = track,
                     AbsoluteTime = (float)localTime.Value,
                     Direction = directionData.Value,
+                    SortKey = (uint)directionData.ClipHash.GetHashCode(),
                     Weight = weight
                 });
             }
@@ -213,7 +215,7 @@ namespace BovineLabs.Timeline.Animation
             // Safety: Each thread processes a distinct target entity via IJobParallelForDefer
             // over the unique-key list. No two threads write the same entity's buffers,
             // so NativeDisableParallelForRestriction is safe here.
-            [NativeDisableParallelForRestriction] public UnsafeBufferLookup<BlendGroupEntry> BlendGroupLookup;
+            [NativeDisableParallelForRestriction] public BufferLookup<BlendGroupEntry> BlendGroupLookup;
 
             [NativeDisableParallelForRestriction]
             public UnsafeBufferLookup<BlendTreePlaybackStateElement> PlaybackStateLookup;
@@ -241,8 +243,20 @@ namespace BovineLabs.Timeline.Animation
                 var processedTrackCount = 0;
                 var fallbackToMap = false;
 
+                var clipList = new UnsafeList<TrackClipData>(16, Allocator.Temp);
                 if (ClipDataMap.TryGetFirstValue(targetEntity, out var clipData, out var it))
-                    do
+                {
+                    do { clipList.Add(clipData); }
+                }
+                clipList.Dispose();
+                }
+                
+                // Sort by SortKey for determinism
+                clipList.Sort(new TrackClipDataComparer());
+
+                for (var cli = 0; cli < clipList.Length; cli++)
+                {
+                    clipData = clipList[cli];
                     {
                         var blendIndex = -1;
                         for (var i = 0; i < processedTrackCount; i++)
@@ -277,7 +291,9 @@ namespace BovineLabs.Timeline.Animation
                         }
 
                         processedTracks[blendIndex] = blend;
-                    } while (ClipDataMap.TryGetNextValue(out clipData, ref it));
+                    }
+                }
+                clipList.Dispose();
 
                 if (fallbackToMap)
                 {
@@ -349,8 +365,20 @@ namespace BovineLabs.Timeline.Animation
             {
                 var processedTracks = new UnsafeList<PerTrackBlend>(16, Allocator.Temp);
 
+                var clipList = new UnsafeList<TrackClipData>(16, Allocator.Temp);
                 if (ClipDataMap.TryGetFirstValue(targetEntity, out var clipData, out var it))
-                    do
+                {
+                    do { clipList.Add(clipData); }
+                }
+                clipList.Dispose();
+                }
+                
+                // Sort by SortKey for determinism
+                clipList.Sort(new TrackClipDataComparer());
+
+                for (var cli = 0; cli < clipList.Length; cli++)
+                {
+                    clipData = clipList[cli];
                     {
                         var blendIndex = -1;
                         for (var i = 0; i < processedTracks.Length; i++)
@@ -379,7 +407,9 @@ namespace BovineLabs.Timeline.Animation
                         }
 
                         processedTracks[blendIndex] = blend;
-                    } while (ClipDataMap.TryGetNextValue(out clipData, ref it));
+                    }
+                }
+                clipList.Dispose();
 
                 for (var i = 0; i < processedTracks.Length; i++)
                     ProcessTrackBlend(targetEntity, processedTracks[i], ref bestFallbackLayer, ref bestFallback,
@@ -606,14 +636,18 @@ namespace BovineLabs.Timeline.Animation
                 internalWeights.Dispose();
             }
 
-            private uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
-            {
-                var hash = (uint)track.Index;
-                hash = (hash * 31) ^ (uint)track.Version;
-                hash = (hash * 31) ^ (uint)layerIndex;
-                hash = (hash * 31) ^ (uint)clipHash.GetHashCode();
-                return hash;
-            }
+                    public static uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
+        {
+            var h = new xxHash3.StreamingState(0x1337);
+            h.Update(track.Index);
+            h.Update(track.Version);
+            h.Update(layerIndex);
+            h.Update(clipHash.Value.x);
+            h.Update(clipHash.Value.y);
+            h.Update(clipHash.Value.z);
+            h.Update(clipHash.Value.w);
+            return (uint)(h.Digest() & 0xFFFFFFFF);
+        }
 
             /// <summary>
             ///     Removes BlendTreePlaybackStateElement entries for tracks that are no longer active.
@@ -704,6 +738,12 @@ namespace BovineLabs.Timeline.Animation
             }
         }
 
+        
+        private struct TrackClipDataComparer : System.Collections.Generic.IComparer<TrackClipData>
+        {
+            public int Compare(TrackClipData x, TrackClipData y) => x.SortKey.CompareTo(y.SortKey);
+        }
+    
         private struct PerTrackBlend
         {
             public Entity TrackEntity;

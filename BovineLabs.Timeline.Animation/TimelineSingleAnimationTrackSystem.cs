@@ -63,7 +63,7 @@ namespace BovineLabs.Timeline.Animation
             {
                 UniqueKeys = uniqueKeys.AsDeferredJobArray(),
                 ActiveAnimations = activeAnimationsMap,
-                AnimationBuffers = state.GetUnsafeBufferLookup<BlendGroupEntry>()
+                AnimationBuffers = state.GetBufferLookup<BlendGroupEntry>(false)
             }.Schedule(uniqueKeys, 64, state.Dependency);
         }
 
@@ -129,14 +129,18 @@ namespace BovineLabs.Timeline.Animation
                 });
             }
 
-            private uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
-            {
-                var hash = (uint)track.Index;
-                hash = (hash * 31) ^ (uint)track.Version;
-                hash = (hash * 31) ^ (uint)layerIndex;
-                hash = (hash * 31) ^ (uint)clipHash.GetHashCode();
-                return hash;
-            }
+                    public static uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
+        {
+            var h = new xxHash3.StreamingState(0x1337);
+            h.Update(track.Index);
+            h.Update(track.Version);
+            h.Update(layerIndex);
+            h.Update(clipHash.Value.x);
+            h.Update(clipHash.Value.y);
+            h.Update(clipHash.Value.z);
+            h.Update(clipHash.Value.w);
+            return (uint)(h.Digest() & 0xFFFFFFFF);
+        }
         }
 
         [BurstCompile]
@@ -159,7 +163,7 @@ namespace BovineLabs.Timeline.Animation
         {
             [ReadOnly] public NativeArray<Entity> UniqueKeys;
             [ReadOnly] public NativeParallelMultiHashMap<Entity, BlendGroupEntry> ActiveAnimations;
-            [NativeDisableParallelForRestriction] public UnsafeBufferLookup<BlendGroupEntry> AnimationBuffers;
+            [NativeDisableParallelForRestriction] public BufferLookup<BlendGroupEntry> AnimationBuffers;
 
             public void Execute(int index)
             {

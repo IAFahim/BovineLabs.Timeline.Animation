@@ -52,7 +52,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 if (authoring.fallbackAnimationClip != null)
                 {
                     var (fallbackHash, fallbackBlob) = BakeFallbackAnimation(authoring, avatar, entity);
-                    builder.WithFallback(fallbackHash, authoring.blendInDuration, authoring.blendOutDuration,
+                    builder = builder.WithFallback(fallbackHash, authoring.blendInDuration, authoring.blendOutDuration,
                             authoring.fallbackPlaybackMode)
                         .WithFallbackBlob(fallbackBlob, fallbackHash);
                 }

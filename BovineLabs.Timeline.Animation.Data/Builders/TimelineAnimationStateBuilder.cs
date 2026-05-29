@@ -6,21 +6,39 @@ using Hash128 = Unity.Entities.Hash128;
 
 namespace BovineLabs.Timeline.Animation.Data.Builders
 {
-    public struct TimelineAnimationStateBuilder
+    public readonly struct TimelineAnimationStateBuilder
     {
         private const float MinDuration = 0.001f;
 
-        private Hash128 _fallbackClipHash;
-        private float _blendInSpeed;
-        private float _blendOutSpeed;
-        private BlobAssetReference<AnimationClipBlob> _fallbackBlob;
-        private Hash128 _fallbackBlobHash;
-        private FallbackPlaybackMode _playbackMode;
+        private readonly Hash128 _fallbackClipHash;
+        private readonly float _blendInSpeed;
+        private readonly float _blendOutSpeed;
+        private readonly BlobAssetReference<AnimationClipBlob> _fallbackBlob;
+        private readonly Hash128 _fallbackBlobHash;
+        private readonly FallbackPlaybackMode _playbackMode;
 
-        private float3 _positionOffset;
-        private quaternion _rotationOffset;
-        private bool _removeStartOffset;
-        private bool _applyFootIK;
+        private readonly float3 _positionOffset;
+        private readonly quaternion _rotationOffset;
+        private readonly bool _removeStartOffset;
+        private readonly bool _applyFootIK;
+
+        public TimelineAnimationStateBuilder(
+            Hash128 fallbackClipHash, float blendInSpeed, float blendOutSpeed,
+            BlobAssetReference<AnimationClipBlob> fallbackBlob, Hash128 fallbackBlobHash,
+            FallbackPlaybackMode playbackMode, float3 positionOffset, quaternion rotationOffset,
+            bool removeStartOffset, bool applyFootIK)
+        {
+            _fallbackClipHash = fallbackClipHash;
+            _blendInSpeed = blendInSpeed;
+            _blendOutSpeed = blendOutSpeed;
+            _fallbackBlob = fallbackBlob;
+            _fallbackBlobHash = fallbackBlobHash;
+            _playbackMode = playbackMode;
+            _positionOffset = positionOffset;
+            _rotationOffset = rotationOffset;
+            _removeStartOffset = removeStartOffset;
+            _applyFootIK = applyFootIK;
+        }
 
         public TimelineAnimationStateBuilder WithFallback(
             Hash128 clipHash,
@@ -28,30 +46,26 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             float blendOutDuration,
             FallbackPlaybackMode mode = FallbackPlaybackMode.Loop)
         {
-            _fallbackClipHash = clipHash;
-            _blendInSpeed = 1f / math.max(MinDuration, blendInDuration);
-            _blendOutSpeed = 1f / math.max(MinDuration, blendOutDuration);
-            _playbackMode = mode;
-            return this;
+            return new TimelineAnimationStateBuilder(
+                clipHash, 1f / math.max(MinDuration, blendInDuration), 1f / math.max(MinDuration, blendOutDuration),
+                _fallbackBlob, _fallbackBlobHash, mode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK);
         }
 
         public TimelineAnimationStateBuilder WithFallbackOffsets(float3 pos, quaternion rot, bool removeStart,
             bool footIK)
         {
-            _positionOffset = pos;
-            _rotationOffset = rot;
-            _removeStartOffset = removeStart;
-            _applyFootIK = footIK;
-            return this;
+            return new TimelineAnimationStateBuilder(
+                _fallbackClipHash, _blendInSpeed, _blendOutSpeed,
+                _fallbackBlob, _fallbackBlobHash, _playbackMode, pos, rot, removeStart, footIK);
         }
 
         public TimelineAnimationStateBuilder WithFallbackBlob(
             BlobAssetReference<AnimationClipBlob> blob,
             Hash128 hash)
         {
-            _fallbackBlob = blob;
-            _fallbackBlobHash = hash;
-            return this;
+            return new TimelineAnimationStateBuilder(
+                _fallbackClipHash, _blendInSpeed, _blendOutSpeed,
+                blob, hash, _playbackMode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK);
         }
 
         public void ApplyTo<T>(ref T builder)
@@ -100,9 +114,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
 
             builder.AddBuffer<BlendGroupEntry>();
             builder.AddBuffer<SmoothBlendGroupEntry>();
-            // Always added: any entity may be targeted by BlendTree2D tracks at runtime.
-            // InternalBufferCapacity(4) means minimal overhead for single-clip-only entities.
-            // The buffer is also used by the cleanup pass in DecomposeAndAppendBlendTreeJob.
             builder.AddBuffer<BlendTreePlaybackStateElement>();
         }
     }
