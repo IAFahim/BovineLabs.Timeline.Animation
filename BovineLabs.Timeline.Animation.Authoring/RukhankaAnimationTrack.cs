@@ -17,6 +17,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
     [Serializable]
     [TrackClipType(typeof(RukhankaAnimationClip))]
     [TrackBindingType(typeof(Animator))]
+    [TrackColor(0.55f, 0.35f, 0.95f)]
     [DisplayName("BovineLabs/Animation/Rukhanka Clip")]
     public class RukhankaAnimationTrack : DOTSTrack
     {
