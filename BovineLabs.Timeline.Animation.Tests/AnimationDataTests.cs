@@ -508,22 +508,21 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             var d = new BlendTree2DDirectionClipData();
             Assert.AreEqual(BlendDirectionReadKind.ClipValue, d.ReadKind);
-            Assert.AreEqual(Entity.Null, d.ReadEntity);
+            Assert.AreEqual(0, d.ReadLinkKey);
             Assert.AreEqual(float2.zero, d.Value);
         }
 
         [Test]
         public void Fields_SetCorrectly()
         {
-            var entity = new Entity { Index = 7, Version = 3 };
             var d = new BlendTree2DDirectionClipData
             {
                 ReadKind = BlendDirectionReadKind.PlayerMoveInput,
-                ReadEntity = entity,
+                ReadLinkKey = 42,
                 Value = new float2(3.0f, 4.0f)
             };
             Assert.AreEqual(BlendDirectionReadKind.PlayerMoveInput, d.ReadKind);
-            Assert.AreEqual(entity, d.ReadEntity);
+            Assert.AreEqual(42, d.ReadLinkKey);
             Assert.AreEqual(new float2(3.0f, 4.0f), d.Value);
         }
     }

@@ -17,7 +17,7 @@ namespace BovineLabs.Timeline.Animation
     public struct BlendTree2DDirectionClipData : IAnimatedComponent<float2>
     {
         public BlendDirectionReadKind ReadKind;
-        public Entity ReadEntity;
+        public ushort ReadLinkKey;
         [CreateProperty] public float2 Value { get; set; }
 
         public float ClipIn;

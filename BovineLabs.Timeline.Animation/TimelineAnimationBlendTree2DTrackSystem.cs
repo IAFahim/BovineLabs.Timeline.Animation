@@ -2,6 +2,8 @@ using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.EntityLinks;
+using BovineLabs.Timeline.EntityLinks.Data;
 using BovineLabs.Timeline.PlayerInputs.Data;
 using Rukhanka;
 using Unity.Burst;
@@ -58,7 +60,10 @@ namespace BovineLabs.Timeline.Animation
             state.Dependency = new UpdateDynamicBlendParametersJob
             {
                 PhysicsVelocityLookup = SystemAPI.GetComponentLookup<PhysicsVelocity>(true),
-                PlayerMoveInputLookup = SystemAPI.GetComponentLookup<PlayerMoveInput>(true)
+                PlayerMoveInputLookup = SystemAPI.GetComponentLookup<PlayerMoveInput>(true),
+                EntityLinkSourceLookup = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
+                EntityLinkEntryLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true),
+                TrackBindingLookup = SystemAPI.GetComponentLookup<TrackBinding>(true)
             }.ScheduleParallel(state.Dependency);
 
             var clipCount = SystemAPI.QueryBuilder()
@@ -117,12 +122,32 @@ namespace BovineLabs.Timeline.Animation
         {
             [ReadOnly] public ComponentLookup<PhysicsVelocity> PhysicsVelocityLookup;
             [ReadOnly] public ComponentLookup<PlayerMoveInput> PlayerMoveInputLookup;
+            [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> EntityLinkSourceLookup;
+            [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> EntityLinkEntryLookup;
+            [ReadOnly] public ComponentLookup<TrackBinding> TrackBindingLookup;
 
-            private void Execute(ref BlendTree2DDirectionClipData clipData)
+            private void Execute(Entity clipEntity, ref BlendTree2DDirectionClipData clipData)
             {
+                if (clipData.ReadKind == BlendDirectionReadKind.ClipValue)
+                    return;
+
+                if (clipData.ReadLinkKey == 0)
+                {
+                    clipData.Value = float2.zero;
+                    return;
+                }
+
+                if (!TrackBindingLookup.TryGetComponent(clipEntity, out var binding) ||
+                    !EntityLinkResolver.TryResolve(binding.Value, clipData.ReadLinkKey,
+                        EntityLinkSourceLookup, EntityLinkEntryLookup, out var resolvedEntity))
+                {
+                    clipData.Value = float2.zero;
+                    return;
+                }
+
                 if (clipData.ReadKind == BlendDirectionReadKind.PhysicsLinearVelocityNormalized)
                 {
-                    if (PhysicsVelocityLookup.TryGetComponent(clipData.ReadEntity, out var pv))
+                    if (PhysicsVelocityLookup.TryGetComponent(resolvedEntity, out var pv))
                     {
                         var vel2d = new float2(pv.Linear.x, pv.Linear.z);
                         var lengthSq = math.lengthsq(vel2d);
@@ -137,7 +162,7 @@ namespace BovineLabs.Timeline.Animation
                 }
                 else if (clipData.ReadKind == BlendDirectionReadKind.PlayerMoveInput)
                 {
-                    if (PlayerMoveInputLookup.TryGetComponent(clipData.ReadEntity, out var moveInput))
+                    if (PlayerMoveInputLookup.TryGetComponent(resolvedEntity, out var moveInput))
                     {
                         var vel2d = moveInput.Value;
                         var lengthSq = math.lengthsq(vel2d);

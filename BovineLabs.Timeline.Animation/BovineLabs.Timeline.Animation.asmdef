@@ -8,6 +8,8 @@
     "BovineLabs.Timeline.Core",
     "BovineLabs.Timeline.Data",
     "BovineLabs.Timeline.Animation.Data",
+    "BovineLabs.Timeline.EntityLinks",
+    "BovineLabs.Timeline.EntityLinks.Data",
     "BovineLabs.Reaction.Data",
     "Rukhanka.Runtime",
     "Unity.Burst",
