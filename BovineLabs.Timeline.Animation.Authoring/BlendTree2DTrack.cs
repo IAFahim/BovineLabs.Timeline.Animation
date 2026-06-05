@@ -26,7 +26,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
             "Blend tree algorithm: SimpleDirectional for 1D-like with a center, FreeformCartesian for 2D positions, FreeformDirectional for 2D with polar handling.")]
         public MotionBlob.Type BlendTreeType = MotionBlob.Type.BlendTree2DSimpleDirectional;
 
-        [Tooltip("Layer index for multi-track blending. 0 = base layer, 1+ = additive/override layers.")]
+        [Tooltip(
+            "Layer index. 0 = base (full body). Put each masked region on its own layer >= 1 so it overrides only its masked bones over the layers below. Two clips that should play on different body parts at full strength (e.g. upper body + lower body, or left arm + right arm) must be on different layers, each with its own Avatar Mask.")]
         public int LayerIndex;
 
         [Header("Track Offsets")] public TrackOffset trackOffset = TrackOffset.ApplyTransformOffsets;
@@ -113,7 +114,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var maskBlob = maskBaker.CreateAvatarMaskBlob(baker, avatarMask, rigDef);
                 avatarMaskHash = maskBlob.Value.hash;
                 baker.AddBuffer<AvatarMaskBakingData>(trackEntity).Add(new AvatarMaskBakingData
-                    { rigEntity = trackEntity, dataBlob = maskBlob });
+                    { rigEntity = baker.GetEntity(rigDef, TransformUsageFlags.Dynamic), dataBlob = maskBlob });
             }
 
             baker.AddComponent(trackEntity, new BlendAnimationTree2DTrackData

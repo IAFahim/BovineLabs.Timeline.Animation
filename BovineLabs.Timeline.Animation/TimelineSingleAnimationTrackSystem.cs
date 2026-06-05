@@ -14,7 +14,7 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(TimelineAnimationUnificationSystem))]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineSingleAnimationTrackSystem : ISystem
     {
         private const float MinDuration = 0.001f;
@@ -119,7 +119,7 @@ namespace BovineLabs.Timeline.Animation
                     Weight = weight,
                     AvatarMaskHash = trackData.ApplyAvatarMask ? trackData.AvatarMaskHash : default,
                     BlendMode = AnimationBlendingMode.Override,
-                    MotionId = ComputeMotionId(clip.Track, trackData.LayerIndex, clipData.ClipHash),
+                    MotionId = MotionId.Compute(clip.Track, trackData.LayerIndex, clipData.ClipHash),
 
                     PositionOffset = finalPosOffset,
                     RotationOffset = finalRotOffset,
@@ -127,19 +127,6 @@ namespace BovineLabs.Timeline.Animation
                     ApplyFootIK = clipData.ApplyFootIK
                 });
             }
-
-                    public static uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
-        {
-            var h = new xxHash3.StreamingState(true, 0x1337);
-            h.Update(track.Index);
-            h.Update(track.Version);
-            h.Update(layerIndex);
-            h.Update(clipHash.Value.x);
-            h.Update(clipHash.Value.y);
-            h.Update(clipHash.Value.z);
-            h.Update(clipHash.Value.w);
-            return h.DigestHash64().x;
-        }
         }
 
         [BurstCompile]

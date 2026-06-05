@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateBefore(typeof(LocalToWorldSystem))]
     [BurstCompile]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
     public partial struct FollowPositionOnlySystem : ISystem
     {
         private ComponentLookup<LocalTransform> _localTransformLookup;
@@ -68,7 +68,7 @@ namespace BovineLabs.Timeline.Animation
 
                 if (ParentLookup.TryGetComponent(entity, out var selfParent) && LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W))
                 {
-                    lt.Position = Unity.Mathematics.math.transform(Unity.Mathematics.math.inverse(parentL2W.Value), targetPos);
+                    lt.Position = math.transform(math.inverse(parentL2W.Value), targetPos);
                 }
                 else
                 {

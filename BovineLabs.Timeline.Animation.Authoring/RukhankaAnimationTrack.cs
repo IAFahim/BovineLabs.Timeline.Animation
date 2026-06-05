@@ -21,7 +21,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
     [DisplayName("BovineLabs/Animation/Rukhanka Clip")]
     public class RukhankaAnimationTrack : DOTSTrack
     {
-        [Tooltip("Layer index for multi-track blending. 0 = base layer, 1+ = additive/override layers.")]
+        [Tooltip(
+            "Layer index. 0 = base (full body). Put each masked region on its own layer >= 1 so it overrides only its masked bones over the layers below. Two clips that should play on different body parts at full strength (e.g. upper body + lower body, or left arm + right arm) must be on different layers, each with its own Avatar Mask.")]
         public int LayerIndex;
 
         [Header("Track Offsets")]
@@ -92,7 +93,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
                 var maskData = new AvatarMaskBakingData
                 {
-                    rigEntity = trackEntity,
+                    rigEntity = baker.GetEntity(rigDef, TransformUsageFlags.Dynamic),
                     dataBlob = maskBlob
                 };
                 baker.AddBuffer<AvatarMaskBakingData>(trackEntity).Add(maskData);

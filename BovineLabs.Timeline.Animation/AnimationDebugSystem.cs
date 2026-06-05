@@ -9,7 +9,7 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(TimelineAnimationUnificationSystem))]
     [RequireMatchingQueriesForUpdate]
-    [Unity.Entities.WorldSystemFilter(Unity.Entities.WorldSystemFilterFlags.LocalSimulation | Unity.Entities.WorldSystemFilterFlags.ClientSimulation | Unity.Entities.WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
     public partial struct AnimationDebugSystem : ISystem
     {
         [BurstCompile]
@@ -37,13 +37,13 @@ namespace BovineLabs.Timeline.Animation
                 for (var i = 0; i < smoothBuf.Length; i++)
                 {
                     var s = smoothBuf[i];
-                    if (s.BlendMode == AnimationBlendingMode.Override)
+                    if (s.BlendMode == AnimationBlendingMode.Override && s.LayerIndex == fb.LayerIndex)
                         overrideWeight += s.CurrentWeight;
                     if (s.TargetWeight <= 0.0001f && s.CurrentWeight > 0.0001f)
                         fadingClips++;
                 }
 
-                d.FallbackWeight = math.max(0f, 1f - overrideWeight);
+                d.FallbackWeight = math.max(0f, 1f - math.min(1f, overrideWeight));
                 d.FallbackTrackCount = fadingClips;
             }
         }
