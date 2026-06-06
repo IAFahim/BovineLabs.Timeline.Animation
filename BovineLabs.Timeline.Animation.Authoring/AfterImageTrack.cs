@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using BovineLabs.Core.Authoring.EntityCommands;
+using BovineLabs.Timeline.Animation.Data.Builders;
 using BovineLabs.Timeline.Authoring;
 using Unity.Entities;
 using UnityEngine;
@@ -40,11 +41,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 return;
             }
 
-            var commands = new BakerCommands(context.Baker, context.TrackEntity);
-            commands.AddComponent(new AfterImageTrackData
+            var builder = new AfterImageTrackBuilder
             {
                 Prefab = context.Baker.GetEntity(afterImagePrefab, TransformUsageFlags.Dynamic)
-            });
+            };
+            var commands = new BakerCommands(context.Baker, context.TrackEntity);
+            builder.ApplyTo(ref commands);
 
             base.Bake(context);
         }

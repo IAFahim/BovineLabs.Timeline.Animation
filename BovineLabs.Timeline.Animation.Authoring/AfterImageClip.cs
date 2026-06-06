@@ -1,4 +1,5 @@
 using BovineLabs.Core.Authoring.EntityCommands;
+using BovineLabs.Timeline.Animation.Data.Builders;
 using BovineLabs.Timeline.Authoring;
 using Unity.Entities;
 using UnityEngine;
@@ -25,11 +26,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
+            var builder = new AfterImageBuilder();
             var commands = new BakerCommands(context.Baker, clipEntity);
-            commands.AddComponent(new AfterImageClipData
-            {
-                SpawnedEntity = Entity.Null
-            });
+            builder.ApplyTo(ref commands);
 
             base.Bake(clipEntity, context);
         }
