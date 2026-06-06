@@ -9,7 +9,8 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TransformSystemGroup))]
     [UpdateBefore(typeof(LocalToWorldSystem))]
     [BurstCompile]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct FollowPositionOnlySystem : ISystem
     {
         private ComponentLookup<LocalTransform> _localTransformLookup;
@@ -53,27 +54,19 @@ namespace BovineLabs.Timeline.Animation
                 var target = follow.TargetBone;
                 float3 targetPos;
 
-                if (LocalTransformLookup.TryGetComponent(target, out var targetLt) && !ParentLookup.HasComponent(target))
-                {
+                if (LocalTransformLookup.TryGetComponent(target, out var targetLt) &&
+                    !ParentLookup.HasComponent(target))
                     targetPos = targetLt.Position;
-                }
                 else if (LocalToWorldLookup.TryGetComponent(target, out var targetL2W))
-                {
                     targetPos = targetL2W.Position;
-                }
                 else
-                {
                     return;
-                }
 
-                if (ParentLookup.TryGetComponent(entity, out var selfParent) && LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W))
-                {
+                if (ParentLookup.TryGetComponent(entity, out var selfParent) &&
+                    LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W))
                     lt.Position = math.transform(math.inverse(parentL2W.Value), targetPos);
-                }
                 else
-                {
                     lt.Position = targetPos;
-                }
             }
         }
     }

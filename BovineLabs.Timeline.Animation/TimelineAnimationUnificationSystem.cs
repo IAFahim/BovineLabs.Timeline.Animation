@@ -10,7 +10,8 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(AnimationProcessSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationUnificationSystem : ISystem
     {
         private const float WeightEpsilon = 0.0001f;

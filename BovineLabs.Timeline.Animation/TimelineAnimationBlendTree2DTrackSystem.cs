@@ -1,3 +1,4 @@
+using System;
 using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
@@ -20,7 +21,8 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(TimelineAnimationUnificationSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationBlendTree2DTrackSystem : ISystem
     {
         /// <summary>
@@ -100,9 +102,9 @@ namespace BovineLabs.Timeline.Animation
                 MotionBufferLookup = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true),
                 FallbackOverrideLookup = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
                 DefaultFallbackLookup = state.GetUnsafeComponentLookup<DefaultBlendGroupFallback>(true),
-                BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(false),
-                PlaybackStateLookup = state.GetBufferLookup<BlendTreePlaybackStateElement>(false),
-                FallbackLookup = state.GetComponentLookup<FallbackBlend>(false),
+                BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(),
+                PlaybackStateLookup = state.GetBufferLookup<BlendTreePlaybackStateElement>(),
+                FallbackLookup = state.GetComponentLookup<FallbackBlend>(),
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
                 IsScrubbing = isScrubbing
             }.Schedule(targetEntities, 64, state.Dependency);
@@ -704,7 +706,7 @@ namespace BovineLabs.Timeline.Animation
             }
         }
 
-        private struct PerTrackBlend : System.IComparable<PerTrackBlend>
+        private struct PerTrackBlend : IComparable<PerTrackBlend>
         {
             public Entity TrackEntity;
             public float DirectionX;

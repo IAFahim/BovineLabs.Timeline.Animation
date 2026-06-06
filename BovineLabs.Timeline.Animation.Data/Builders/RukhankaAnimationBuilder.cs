@@ -1,6 +1,4 @@
 using BovineLabs.Core.EntityCommands;
-using BovineLabs.Timeline.Animation;
-using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine.Timeline;
 using Hash128 = Unity.Entities.Hash128;

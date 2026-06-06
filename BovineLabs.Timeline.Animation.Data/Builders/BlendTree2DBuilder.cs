@@ -1,6 +1,4 @@
 using BovineLabs.Core.EntityCommands;
-using BovineLabs.Timeline.Animation;
-using Unity.Entities;
 using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Animation.Data.Builders

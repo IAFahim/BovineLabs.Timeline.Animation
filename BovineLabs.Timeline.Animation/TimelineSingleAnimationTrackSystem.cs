@@ -14,7 +14,8 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(TimelineAnimationUnificationSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineSingleAnimationTrackSystem : ISystem
     {
         private const float MinDuration = 0.001f;
@@ -44,9 +45,7 @@ namespace BovineLabs.Timeline.Animation
         {
             var count = _query.CalculateEntityCountWithoutFiltering();
             if (activeAnimationsMap.Capacity < count)
-            {
                 activeAnimationsMap.Capacity = math.max(activeAnimationsMap.Capacity * 2, count);
-            }
             activeAnimationsMap.Clear();
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
 
@@ -70,7 +69,7 @@ namespace BovineLabs.Timeline.Animation
             {
                 UniqueKeys = uniqueKeys.AsDeferredJobArray(),
                 ActiveAnimations = activeAnimationsMap,
-                AnimationBuffers = state.GetBufferLookup<BlendGroupEntry>(false)
+                AnimationBuffers = state.GetBufferLookup<BlendGroupEntry>()
             }.Schedule(uniqueKeys, 64, state.Dependency);
         }
 

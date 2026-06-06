@@ -48,7 +48,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         {
             return new TimelineAnimationStateBuilder(
                 clipHash, 1f / math.max(MinDuration, blendInDuration), 1f / math.max(MinDuration, blendOutDuration),
-                _fallbackBlob, _fallbackBlobHash, mode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK);
+                _fallbackBlob, _fallbackBlobHash, mode, _positionOffset, _rotationOffset, _removeStartOffset,
+                _applyFootIK);
         }
 
         public TimelineAnimationStateBuilder WithFallbackOffsets(float3 pos, quaternion rot, bool removeStart,

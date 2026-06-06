@@ -9,7 +9,8 @@ namespace BovineLabs.Timeline.Animation
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(TimelineAnimationUnificationSystem))]
     [UpdateBefore(typeof(AnimationProcessSystem))]
-    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation | WorldSystemFilterFlags.ServerSimulation)]
+    [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
+                       WorldSystemFilterFlags.ServerSimulation)]
     public partial struct AfterImageSpawnSystem : ISystem
     {
         private struct SpawnRequest
@@ -121,7 +122,8 @@ namespace BovineLabs.Timeline.Animation
                 var data = state.EntityManager.GetComponentData<AfterImageClipData>(entities[i]);
                 if (data.SpawnedEntity != Entity.Null)
                 {
-                    if (state.EntityManager.Exists(data.SpawnedEntity)) state.EntityManager.DestroyEntity(data.SpawnedEntity);
+                    if (state.EntityManager.Exists(data.SpawnedEntity))
+                        state.EntityManager.DestroyEntity(data.SpawnedEntity);
                     data.SpawnedEntity = Entity.Null;
                     state.EntityManager.SetComponentData(entities[i], data);
                 }

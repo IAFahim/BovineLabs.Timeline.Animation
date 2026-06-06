@@ -2,7 +2,6 @@ using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Animation.Data.Builders;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
-using BovineLabs.Timeline.PlayerInputs.Authoring;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;

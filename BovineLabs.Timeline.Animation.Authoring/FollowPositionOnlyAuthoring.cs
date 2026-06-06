@@ -6,7 +6,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
     public class FollowPositionOnlyAuthoring : MonoBehaviour
     {
         public Transform target;
-        
+
         private void LateUpdate()
         {
             if (target == null) return;
