@@ -21,12 +21,14 @@ namespace BovineLabs.Timeline.Animation
 
         private NativeParallelMultiHashMap<Entity, BlendGroupEntry> activeAnimationsMap;
         private NativeList<Entity> uniqueKeys;
+        private EntityQuery _query;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             activeAnimationsMap = new NativeParallelMultiHashMap<Entity, BlendGroupEntry>(64, Allocator.Persistent);
             uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            _query = SystemAPI.QueryBuilder().WithAll<ClipActive, TimelineActive, RukhankaSingleClipData>().Build();
             state.RequireForUpdate<BlobDatabaseSingleton>();
         }
 
@@ -40,6 +42,11 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
+            var count = _query.CalculateEntityCountWithoutFiltering();
+            if (activeAnimationsMap.Capacity < count)
+            {
+                activeAnimationsMap.Capacity = math.max(activeAnimationsMap.Capacity * 2, count);
+            }
             activeAnimationsMap.Clear();
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
 
