@@ -1,3 +1,4 @@
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
 using Rukhanka.Hybrid;
 using Unity.Entities;
@@ -50,13 +51,15 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
+            var commands = new BakerCommands(context.Baker, clipEntity);
+
             if (animationClipHolder != null)
             {
                 Avatar avatar = null;
                 var rigDef = context.Director.ResolveRigDefinition(context.Track);
                 if (rigDef != null) avatar = rigDef.GetAvatar();
 
-                context.Baker.AddComponent(clipEntity, new RukhankaSingleClipData
+                commands.AddComponent(new RukhankaSingleClipData
                 {
                     ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar),
                     ClipIn = (float)context.Clip.clipIn,

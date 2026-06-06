@@ -1,3 +1,4 @@
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
 using BovineLabs.Timeline.PlayerInputs.Authoring;
@@ -46,6 +47,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public override void Bake(Entity clipEntity, BakingContext context)
         {
+            var commands = new BakerCommands(context.Baker, clipEntity);
+
             ushort readLinkKey = 0;
             if (ReadKind != BlendDirectionReadKind.ClipValue)
             {
@@ -65,7 +68,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 readLinkKey = key;
             }
 
-            context.Baker.AddComponent(clipEntity, new BlendTree2DDirectionClipData
+            commands.AddComponent(new BlendTree2DDirectionClipData
             {
                 Value = BlendParameter,
                 ReadKind = ReadKind,

@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Authoring;
 using Unity.Entities;
 using UnityEngine;
@@ -39,7 +40,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 return;
             }
 
-            context.Baker.AddComponent(context.TrackEntity, new AfterImageTrackData
+            var commands = new BakerCommands(context.Baker, context.TrackEntity);
+            commands.AddComponent(new AfterImageTrackData
             {
                 Prefab = context.Baker.GetEntity(afterImagePrefab, TransformUsageFlags.Dynamic)
             });
