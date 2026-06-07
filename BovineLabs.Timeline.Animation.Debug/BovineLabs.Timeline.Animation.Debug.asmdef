@@ -1,0 +1,30 @@
+{
+  "name": "BovineLabs.Timeline.Animation.Debug",
+  "rootNamespace": "",
+  "references": [
+    "BovineLabs.Timeline.Animation",
+    "BovineLabs.Timeline.Animation.Data",
+    "BovineLabs.Timeline.Data",
+    "BovineLabs.Timeline",
+    "BovineLabs.Quill",
+    "BovineLabs.Timeline.Core.Debug",
+    "BovineLabs.Core",
+    "Rukhanka.Runtime",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Entities",
+    "Unity.Mathematics",
+    "Unity.Transforms"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_EDITOR || BL_DEBUG"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
