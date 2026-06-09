@@ -65,9 +65,11 @@ namespace BovineLabs.Timeline.Animation
                 IntegrateWeights(ref smoothEntries, fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
 
                 var baseLayer = fallbackData.LayerIndex;
+                var baseControl = IntegrateBaseLayerControl(ref timer, in smoothEntries, baseLayer,
+                    fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
 
-                EmitFallback(ref timer, in fallbackData, in smoothEntries, baseLayer, ref atps);
-                EmitClips(in smoothEntries, baseLayer, ref atps);
+                EmitFallback(ref timer, in fallbackData, baseControl, ref atps);
+                EmitClips(in smoothEntries, baseLayer, baseControl, ref atps);
 
                 SortByLayer(ref atps);
 
@@ -166,23 +168,61 @@ namespace BovineLabs.Timeline.Animation
                         clipBlob.IsCreated)
                     {
                         var duration = math.max(MinDuration, clipBlob.Value.length);
-                        s.NormalizedTime += (IsScrubbing ? 0f : DeltaTime) / duration;
-                        s.NormalizedTime = math.frac(s.NormalizedTime);
+                        var advance = (IsScrubbing ? 0f : DeltaTime) / duration;
+                        s.NormalizedTime = clipBlob.Value.looped
+                            ? math.frac(s.NormalizedTime + advance)
+                            : math.min(1f, s.NormalizedTime + advance);
                     }
 
                     smoothEntries[i] = s;
                 }
             }
 
+            private float IntegrateBaseLayerControl(
+                ref BlendGroupTimer timer,
+                in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
+                int baseLayer,
+                float blendInSpeed,
+                float blendOutSpeed)
+            {
+                var baseRequested = false;
+                var maxBaseCurrent = 0f;
+
+                for (var i = 0; i < smoothEntries.Length; i++)
+                {
+                    var e = smoothEntries[i];
+                    if (e.BlendMode != AnimationBlendingMode.Override || e.LayerIndex != baseLayer)
+                        continue;
+
+                    if (e.TargetWeight > WeightEpsilon)
+                        baseRequested = true;
+
+                    maxBaseCurrent = math.max(maxBaseCurrent, e.CurrentWeight);
+                }
+
+                var target = baseRequested ? 1f : 0f;
+                var speed = timer.BaseLayerControl < target ? blendInSpeed : blendOutSpeed;
+
+                if (IsScrubbing)
+                {
+                    timer.BaseLayerControl = target;
+                }
+                else
+                {
+                    var lerpT = speed <= WeightEpsilon ? 1f : 1f - math.exp(-speed * DeltaTime);
+                    timer.BaseLayerControl = math.lerp(timer.BaseLayerControl, target, lerpT);
+                }
+
+                return math.saturate(math.max(timer.BaseLayerControl, maxBaseCurrent));
+            }
+
             private void EmitFallback(
                 ref BlendGroupTimer timer,
                 in FallbackBlend fallbackData,
-                in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
-                int baseLayer,
+                float baseControl,
                 ref DynamicBuffer<AnimationToProcessComponent> atps)
             {
-                var baseOverride = math.min(1f, OverrideSumForLayer(in smoothEntries, baseLayer));
-                var fallbackWeight = 1f - baseOverride;
+                var fallbackWeight = 1f - baseControl;
 
                 if (fallbackWeight <= WeightEpsilon || fallbackData.ClipHash == default)
                     return;
@@ -222,7 +262,7 @@ namespace BovineLabs.Timeline.Animation
                     time = fallbackTime,
                     weight = fallbackWeight,
                     blendMode = fallbackData.BlendMode,
-                    layerIndex = baseLayer,
+                    layerIndex = fallbackData.LayerIndex,
                     layerWeight = 1.0f,
                     motionId = MotionId.Fallback,
 
@@ -236,6 +276,7 @@ namespace BovineLabs.Timeline.Animation
             private void EmitClips(
                 in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
                 int baseLayer,
+                float baseControl,
                 ref DynamicBuffer<AnimationToProcessComponent> atps)
             {
                 for (var i = 0; i < smoothEntries.Length; i++)
@@ -253,7 +294,7 @@ namespace BovineLabs.Timeline.Animation
 
                         if (s.LayerIndex == baseLayer)
                         {
-                            var normalizeFactor = layerSum > 1f ? 1f / layerSum : 1f;
+                            var normalizeFactor = layerSum > WeightEpsilon ? baseControl / layerSum : 0f;
                             weight = s.CurrentWeight * normalizeFactor;
                             layerWeight = 1.0f;
                         }

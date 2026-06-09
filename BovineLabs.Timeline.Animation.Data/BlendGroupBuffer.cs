@@ -44,6 +44,7 @@ namespace BovineLabs.Timeline.Animation
     {
         public float FallbackAccumulatedTime;
         public Hash128 PreviousFallbackClipHash;
+        public float BaseLayerControl;
     }
 
     public struct FallbackBlend : IComponentData

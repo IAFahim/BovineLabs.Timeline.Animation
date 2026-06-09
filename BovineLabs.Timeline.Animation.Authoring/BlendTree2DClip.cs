@@ -17,6 +17,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public BlendDirectionReadKind ReadKind;
         public EntityLinkSchema ReadFrom;
 
+        [Tooltip(
+            "Speed (m/s) mapped to the outer edge of the blend space when ReadKind reads physics velocity. " +
+            "Velocity is rotated into the character's facing and divided by this, so radius 0 = idle and radius 1 = this speed.")]
+        [Min(0.001f)]
+        public float maxSpeed = 5f;
+
         [Header("Clip Transform Offsets")] public Vector3 positionOffset = Vector3.zero;
 
         public Vector3 eulerAnglesOffset = Vector3.zero;
@@ -73,6 +79,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 ReadLinkKey = readLinkKey,
                 ClipIn = (float)context.Clip.clipIn,
                 TimeScale = (float)context.Clip.timeScale,
+                MaxSpeed = maxSpeed,
                 PositionOffset = positionOffset,
                 RotationOffset = Quaternion.Euler(eulerAnglesOffset),
                 RemoveStartOffset = removeStartOffset,

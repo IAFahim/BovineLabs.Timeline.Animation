@@ -22,6 +22,7 @@ namespace BovineLabs.Timeline.Animation
 
         public float ClipIn;
         public float TimeScale;
+        public float MaxSpeed;
 
         // Added Parity Features
         public float3 PositionOffset;

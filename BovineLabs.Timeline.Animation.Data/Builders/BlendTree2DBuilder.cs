@@ -10,6 +10,7 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         public ushort ReadLinkKey;
         public float ClipIn;
         public float TimeScale;
+        public float MaxSpeed;
         public float3 PositionOffset;
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
@@ -25,6 +26,7 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 ReadLinkKey = ReadLinkKey,
                 ClipIn = ClipIn,
                 TimeScale = TimeScale,
+                MaxSpeed = MaxSpeed,
                 PositionOffset = PositionOffset,
                 RotationOffset = RotationOffset,
                 RemoveStartOffset = RemoveStartOffset,

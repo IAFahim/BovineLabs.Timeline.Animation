@@ -14,6 +14,7 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Physics;
+using Unity.Transforms;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
@@ -62,6 +63,7 @@ namespace BovineLabs.Timeline.Animation
             state.Dependency = new UpdateDynamicBlendParametersJob
             {
                 PhysicsVelocityLookup = SystemAPI.GetComponentLookup<PhysicsVelocity>(true),
+                LocalToWorldLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true),
                 PlayerMoveInputLookup = SystemAPI.GetComponentLookup<PlayerMoveInput>(true),
                 EntityLinkSourceLookup = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
                 EntityLinkEntryLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true),
@@ -100,19 +102,11 @@ namespace BovineLabs.Timeline.Animation
                 AnimDB = blobDB.animations,
                 TrackDataLookup = state.GetUnsafeComponentLookup<BlendAnimationTree2DTrackData>(true),
                 MotionBufferLookup = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true),
-                FallbackOverrideLookup = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
-                DefaultFallbackLookup = state.GetUnsafeComponentLookup<DefaultBlendGroupFallback>(true),
                 BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(),
                 PlaybackStateLookup = state.GetBufferLookup<BlendTreePlaybackStateElement>(),
-                FallbackLookup = state.GetComponentLookup<FallbackBlend>(),
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
                 IsScrubbing = isScrubbing
             }.Schedule(targetEntities, 64, state.Dependency);
-
-            state.Dependency = new ResetStaleFallbackJob
-            {
-                TargetEntities = targetEntities.AsDeferredJobArray()
-            }.Schedule(state.Dependency);
 
             targetEntities.Dispose(state.Dependency);
             clipDataMap.Dispose(state.Dependency);
@@ -123,6 +117,7 @@ namespace BovineLabs.Timeline.Animation
         private partial struct UpdateDynamicBlendParametersJob : IJobEntity
         {
             [ReadOnly] public ComponentLookup<PhysicsVelocity> PhysicsVelocityLookup;
+            [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public ComponentLookup<PlayerMoveInput> PlayerMoveInputLookup;
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> EntityLinkSourceLookup;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> EntityLinkEntryLookup;
@@ -151,11 +146,15 @@ namespace BovineLabs.Timeline.Animation
                 {
                     if (PhysicsVelocityLookup.TryGetComponent(resolvedEntity, out var pv))
                     {
-                        var vel2d = new float2(pv.Linear.x, pv.Linear.z);
-                        var lengthSq = math.lengthsq(vel2d);
-                        clipData.Value = lengthSq > DirectionEpsilon
-                            ? vel2d / math.sqrt(lengthSq)
-                            : float2.zero;
+                        var worldVelocity = new float3(pv.Linear.x, 0f, pv.Linear.z);
+                        var facing = LocalToWorldLookup.TryGetComponent(resolvedEntity, out var ltw)
+                            ? quaternion.LookRotationSafe(new float3(ltw.Forward.x, 0f, ltw.Forward.z), math.up())
+                            : quaternion.identity;
+                        var localVelocity = math.rotate(math.inverse(facing), worldVelocity);
+                        var speedFraction = new float2(localVelocity.x, localVelocity.z) /
+                                            math.max(DirectionEpsilon, clipData.MaxSpeed);
+                        var radius = math.length(speedFraction);
+                        clipData.Value = radius > 1f ? speedFraction / radius : speedFraction;
                     }
                     else
                     {
@@ -229,15 +228,11 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public NativeHashMap<Hash128, BlobAssetReference<AnimationClipBlob>> AnimDB;
             [ReadOnly] public UnsafeComponentLookup<BlendAnimationTree2DTrackData> TrackDataLookup;
             [ReadOnly] public UnsafeBufferLookup<BlendTree2DMotionData> MotionBufferLookup;
-            [ReadOnly] public UnsafeComponentLookup<TrackFallbackOverride> FallbackOverrideLookup;
-            [ReadOnly] public UnsafeComponentLookup<DefaultBlendGroupFallback> DefaultFallbackLookup;
 
             [NativeDisableParallelForRestriction] public BufferLookup<BlendGroupEntry> BlendGroupLookup;
 
             [NativeDisableParallelForRestriction]
             public BufferLookup<BlendTreePlaybackStateElement> PlaybackStateLookup;
-
-            [NativeDisableParallelForRestriction] public ComponentLookup<FallbackBlend> FallbackLookup;
 
             public float GlobalDeltaTime;
             public bool IsScrubbing;
@@ -247,10 +242,6 @@ namespace BovineLabs.Timeline.Animation
                 var targetEntity = TargetEntities[index];
 
                 if (!BlendGroupLookup.TryGetBuffer(targetEntity, out var blendGroupBuffer)) return;
-
-                var bestFallbackLayer = -1;
-                TrackFallbackOverride bestFallback = default;
-                var hasFallbackCandidate = false;
 
                 const int stackTrackCapacity = 128;
                 var processedTracks = stackalloc PerTrackBlend[stackTrackCapacity];
@@ -297,70 +288,18 @@ namespace BovineLabs.Timeline.Animation
 
                 if (fallbackToMap)
                 {
-                    ProcessTracksWithList(targetEntity, ref bestFallbackLayer, ref bestFallback,
-                        ref hasFallbackCandidate);
+                    ProcessTracksWithList(targetEntity);
                 }
                 else
                 {
                     for (var i = 0; i < processedTrackCount; i++)
-                        ProcessTrackBlend(targetEntity, processedTracks[i], ref bestFallbackLayer, ref bestFallback,
-                            ref hasFallbackCandidate);
+                        ProcessTrackBlend(targetEntity, processedTracks[i]);
 
                     CleanupOrphanPlaybackStates(targetEntity, processedTracks, processedTrackCount);
                 }
-
-                if (hasFallbackCandidate)
-                {
-                    if (FallbackLookup.HasComponent(targetEntity))
-                    {
-                        var prev = FallbackLookup[targetEntity];
-                        var next = new FallbackBlend
-                        {
-                            ClipHash = bestFallback.FallbackClipHash,
-                            BlendInSpeed = bestFallback.BlendInSpeed,
-                            BlendOutSpeed = bestFallback.BlendOutSpeed,
-                            PlaybackMode = bestFallback.PlaybackMode,
-                            LayerIndex = bestFallback.LayerIndex,
-                            BlendMode = bestFallback.BlendMode,
-                            AvatarMaskHash = bestFallback.AvatarMaskHash,
-                            PositionOffset = bestFallback.PositionOffset,
-                            RotationOffset = bestFallback.RotationOffset,
-                            RemoveStartOffset = bestFallback.RemoveStartOffset,
-                            ApplyFootIK = bestFallback.ApplyFootIK
-                        };
-
-                        if (prev.ClipHash != next.ClipHash)
-                            FallbackLookup[targetEntity] = next;
-                    }
-                }
-                else if (DefaultFallbackLookup.TryGetComponent(targetEntity, out var defaults))
-                {
-                    if (FallbackLookup.HasComponent(targetEntity))
-                    {
-                        var prev = FallbackLookup[targetEntity];
-                        var next = new FallbackBlend
-                        {
-                            ClipHash = defaults.ClipHash,
-                            BlendInSpeed = defaults.BlendInSpeed,
-                            BlendOutSpeed = defaults.BlendOutSpeed,
-                            PlaybackMode = defaults.PlaybackMode,
-                            LayerIndex = defaults.LayerIndex,
-                            BlendMode = defaults.BlendMode,
-                            AvatarMaskHash = defaults.AvatarMaskHash,
-                            PositionOffset = defaults.PositionOffset,
-                            RotationOffset = defaults.RotationOffset,
-                            RemoveStartOffset = defaults.RemoveStartOffset,
-                            ApplyFootIK = defaults.ApplyFootIK
-                        };
-
-                        if (prev.ClipHash != next.ClipHash)
-                            FallbackLookup[targetEntity] = next;
-                    }
-                }
             }
 
-            private void ProcessTracksWithList(Entity targetEntity, ref int bestFallbackLayer,
-                ref TrackFallbackOverride bestFallback, ref bool hasFallbackCandidate)
+            private void ProcessTracksWithList(Entity targetEntity)
             {
                 var processedTracks = new UnsafeList<PerTrackBlend>(16, Allocator.Temp);
 
@@ -399,28 +338,17 @@ namespace BovineLabs.Timeline.Animation
                 processedTracks.Sort();
 
                 for (var i = 0; i < processedTracks.Length; i++)
-                    ProcessTrackBlend(targetEntity, processedTracks[i], ref bestFallbackLayer, ref bestFallback,
-                        ref hasFallbackCandidate);
+                    ProcessTrackBlend(targetEntity, processedTracks[i]);
 
                 CleanupOrphanPlaybackStatesHeap(targetEntity, ref processedTracks);
                 processedTracks.Dispose();
             }
 
-            private void ProcessTrackBlend(Entity targetEntity, in PerTrackBlend blend, ref int bestFallbackLayer,
-                ref TrackFallbackOverride bestFallback, ref bool hasFallbackCandidate)
+            private void ProcessTrackBlend(Entity targetEntity, in PerTrackBlend blend)
             {
                 if (blend.TotalWeight <= 0f) return;
 
                 var trackEntity = blend.TrackEntity;
-                if (FallbackOverrideLookup.TryGetComponent(trackEntity, out var fo) &&
-                    TrackDataLookup.TryGetComponent(trackEntity, out var td) &&
-                    td.LayerIndex > bestFallbackLayer)
-                {
-                    bestFallbackLayer = td.LayerIndex;
-                    bestFallback = fo;
-                    hasFallbackCandidate = true;
-                }
-
                 var totalWeight = math.saturate(blend.TotalWeight);
                 var blendedDirection = new float2(blend.DirectionX, blend.DirectionY) /
                                        math.max(DirectionEpsilon, blend.TotalWeight);
@@ -670,39 +598,6 @@ namespace BovineLabs.Timeline.Animation
                     if (!found)
                         stateBuffer.RemoveAtSwapBack(i);
                 }
-            }
-        }
-
-        /// <summary>
-        ///     Resets FallbackBlend to DefaultBlendGroupFallback for entities not processed by
-        ///     DecomposeAndAppendBlendTreeJob (i.e. entities with no active blend-tree clips).
-        /// </summary>
-        [BurstCompile]
-        private partial struct ResetStaleFallbackJob : IJobEntity
-        {
-            [ReadOnly] public NativeArray<Entity> TargetEntities;
-
-            public void Execute(Entity entity, ref FallbackBlend fallback,
-                in DefaultBlendGroupFallback defaults)
-            {
-                for (var i = 0; i < TargetEntities.Length; i++)
-                    if (TargetEntities[i] == entity)
-                        return;
-
-                fallback = new FallbackBlend
-                {
-                    ClipHash = defaults.ClipHash,
-                    BlendInSpeed = defaults.BlendInSpeed,
-                    BlendOutSpeed = defaults.BlendOutSpeed,
-                    PlaybackMode = defaults.PlaybackMode,
-                    LayerIndex = defaults.LayerIndex,
-                    BlendMode = defaults.BlendMode,
-                    AvatarMaskHash = defaults.AvatarMaskHash,
-                    PositionOffset = defaults.PositionOffset,
-                    RotationOffset = defaults.RotationOffset,
-                    RemoveStartOffset = defaults.RemoveStartOffset,
-                    ApplyFootIK = defaults.ApplyFootIK
-                };
             }
         }
 

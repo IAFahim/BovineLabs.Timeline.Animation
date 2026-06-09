@@ -36,6 +36,20 @@ namespace BovineLabs.Timeline.Animation.Authoring
         [Header("Avatar Mask")] public AvatarMask avatarMask;
         public bool applyAvatarMask = true;
 
+        [Header("Exit / Fallback Override (Optional)")]
+        [Tooltip(
+            "Idle/fallback clip this track latches when it is the dominant active track. Lets a stance track (e.g. crouch) own the idle so movement falls back to its idle, not the default standing idle. Highest LayerIndex wins among simultaneously active overrides; the latch persists until another override track takes over.")]
+        public AnimationClip ExitIdleClip;
+
+        [Tooltip("Time in seconds to blend into this fallback clip.")] [Min(0.001f)]
+        public float BlendInDuration = 0.25f;
+
+        [Tooltip("Time in seconds to blend out of this fallback clip.")] [Min(0.001f)]
+        public float BlendOutDuration = 0.25f;
+
+        [Tooltip("How the fallback animation wraps.")]
+        public FallbackPlaybackMode FallbackPlaybackMode = FallbackPlaybackMode.Loop;
+
 #if UNITY_EDITOR
         /// <summary>
         ///     In edit mode, create a native AnimationMixerPlayable and connect it
@@ -111,12 +125,35 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 AvatarMaskHash = avatarMaskHash
             });
 
+            if (ExitIdleClip != null && ExitIdleClip.TryComputeHash(rigDef.GetAvatar(), out var exitIdleHash))
+            {
+                baker.AddComponent(trackEntity, new TrackFallbackOverride
+                {
+                    FallbackClipHash = exitIdleHash,
+                    BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
+                    BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
+                    PlaybackMode = FallbackPlaybackMode,
+                    LayerIndex = LayerIndex,
+                    BlendMode = AnimationBlendingMode.Override,
+                    AvatarMaskHash = avatarMaskHash,
+                    PositionOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero,
+                    RotationOffset = trackOffset == TrackOffset.ApplyTransformOffsets
+                        ? Quaternion.Euler(eulerAnglesOffset)
+                        : Quaternion.identity,
+                    RemoveStartOffset = true,
+                    ApplyFootIK = true
+                });
+            }
+
             // Bake clips
             var clipsToBake = GetClips()
                 .Select(c => c.asset as RukhankaAnimationClip)
                 .Where(h => h?.animationClipHolder != null)
                 .Select(h => h.animationClipHolder)
                 .ToHashSet();
+
+            if (ExitIdleClip != null)
+                clipsToBake.Add(ExitIdleClip);
 
             if (clipsToBake.Count > 0)
             {
