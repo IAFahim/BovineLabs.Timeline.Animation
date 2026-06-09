@@ -27,7 +27,9 @@ namespace BovineLabs.Timeline.Animation.Editor
         {
             serializedObject.Update();
 
+            EditorGUI.BeginChangeCheck();
             EditorGUILayout.PropertyField(m_AnimationClipHolder, new GUIContent("Animation Clip"));
+            var animationClipChanged = EditorGUI.EndChangeCheck();
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Clip Transform Offsets", EditorStyles.boldLabel);
@@ -40,6 +42,27 @@ namespace BovineLabs.Timeline.Animation.Editor
             EditorGUI.indentLevel--;
 
             serializedObject.ApplyModifiedProperties();
+
+            if (animationClipChanged)
+            {
+                MatchSelectedClips(true);
+            }
+
+            using (new EditorGUI.DisabledScope(targets.Length == 0))
+            {
+                if (GUILayout.Button("Match Timeline Clip Length"))
+                {
+                    MatchSelectedClips(true);
+                }
+            }
+        }
+
+        private void MatchSelectedClips(bool resetPlayback)
+        {
+            for (var i = 0; i < targets.Length; i++)
+            {
+                RukhankaAnimationClipTimeline.MatchSelected(targets[i], resetPlayback);
+            }
         }
     }
 }
