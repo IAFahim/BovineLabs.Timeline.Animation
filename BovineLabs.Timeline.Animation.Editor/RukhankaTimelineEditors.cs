@@ -24,14 +24,20 @@ namespace BovineLabs.Timeline.Animation.Editor
     {
         public override void OnCreate(TimelineClip clip, TrackAsset track, TimelineClip clonedFrom)
         {
-            if (clonedFrom == null) RukhankaAnimationClipTimeline.MatchSource(clip, track, true, true);
+            if (clonedFrom == null)
+            {
+                RukhankaAnimationClipTimeline.MatchSource(clip, track, true, true);
+            }
         }
 
         public override ClipDrawOptions GetClipOptions(TimelineClip clip)
         {
             var options = base.GetClipOptions(clip);
-            var asset = clip.asset as RukhankaAnimationClip;
-            if (asset != null && asset.animationClipHolder != null) options.tooltip = asset.animationClipHolder.name;
+
+            if (clip.asset is RukhankaAnimationClip asset && asset.animationClipHolder != null)
+            {
+                options.tooltip = asset.animationClipHolder.name;
+            }
 
             return options;
         }
@@ -51,30 +57,37 @@ namespace BovineLabs.Timeline.Animation.Editor
             for (var i = 0; i < clips.Length; i++)
             {
                 var clip = clips[i];
+
                 if (clip != null && clip.asset == asset)
+                {
                     changed |= MatchSource(clip, clip.parentTrack, resetPlayback, true);
+                }
             }
 
             if (changed)
-                TimelineEditor.Refresh(RefreshReason.ContentsModified | RefreshReason.SceneNeedsUpdate |
-                                       RefreshReason.WindowNeedsRedraw);
+            {
+                TimelineEditor.Refresh(RefreshReason.ContentsModified | RefreshReason.SceneNeedsUpdate | RefreshReason.WindowNeedsRedraw);
+            }
 
             return changed;
         }
 
         public static bool MatchSource(TimelineClip clip, TrackAsset track, bool resetPlayback, bool recordUndo)
         {
-            if (clip == null) return false;
-
-            var asset = clip.asset as RukhankaAnimationClip;
-            var animationClip = asset != null ? asset.animationClipHolder : null;
-            if (animationClip == null) return false;
+            if (clip == null || clip.asset is not RukhankaAnimationClip asset || asset.animationClipHolder == null)
+            {
+                return false;
+            }
 
             var changed = false;
+            var animationClip = asset.animationClipHolder;
             var duration = Math.Max(MinDuration, animationClip.length);
             var owner = track != null ? track : clip.parentTrack;
 
-            if (recordUndo && owner != null) Undo.RegisterCompleteObjectUndo(owner, UndoName);
+            if (recordUndo && owner != null)
+            {
+                Undo.RegisterCompleteObjectUndo(owner, UndoName);
+            }
 
             if (!Approximately(clip.duration, duration))
             {
@@ -100,7 +113,10 @@ namespace BovineLabs.Timeline.Animation.Editor
                 changed = true;
             }
 
-            if (changed && owner != null) EditorUtility.SetDirty(owner);
+            if (changed && owner != null)
+            {
+                EditorUtility.SetDirty(owner);
+            }
 
             return changed;
         }

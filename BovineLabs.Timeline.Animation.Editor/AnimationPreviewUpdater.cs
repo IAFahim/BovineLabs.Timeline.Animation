@@ -1,10 +1,11 @@
 #if UNITY_EDITOR
+
 using System;
 using Unity.Entities;
 using UnityEditor;
+using UnityEditor.Timeline;
 using UnityEngine;
 using UnityEngine.Playables;
-using Object = UnityEngine.Object;
 
 namespace BovineLabs.Timeline.Animation.Editor
 {
@@ -12,7 +13,7 @@ namespace BovineLabs.Timeline.Animation.Editor
     internal static class AnimationPreviewUpdater
     {
         private static PlayableDirector s_Director;
-        private static double s_LastTime = -1;
+        private static double s_LastTime = -1d;
 
         static AnimationPreviewUpdater()
         {
@@ -21,34 +22,53 @@ namespace BovineLabs.Timeline.Animation.Editor
 
         private static void OnEditorUpdate()
         {
-            if (Application.isPlaying) return;
-            if (EditorApplication.isCompiling) return;
-
-            var director = s_Director;
-            if (director == null)
+            if (Application.isPlaying || EditorApplication.isCompiling)
             {
-                director = Object.FindAnyObjectByType<PlayableDirector>();
-                if (director == null) return;
-                s_Director = director;
-                s_LastTime = -1;
+                return;
             }
 
-            if (!director.playableGraph.IsValid()) return;
+            var director = TimelineEditor.inspectedDirector;
+
+            if (director == null)
+            {
+                s_Director = null;
+                s_LastTime = -1d;
+                return;
+            }
+
+            if (director != s_Director)
+            {
+                s_Director = director;
+                s_LastTime = -1d;
+            }
+
+            if (!director.playableGraph.IsValid())
+            {
+                return;
+            }
 
             var time = director.time;
-            if (Math.Abs(time - s_LastTime) < 0.0001) return;
-            s_LastTime = time;
 
+            if (Math.Abs(time - s_LastTime) < 0.0001d)
+            {
+                return;
+            }
+
+            s_LastTime = time;
             director.playableGraph.Evaluate();
 
-            // Force ECS Editor World to tick so timeline systems + Rukhanka bone pipeline run
             foreach (var world in World.All)
-                if ((world.Flags & WorldFlags.Editor) == WorldFlags.Editor)
+            {
+                if ((world.Flags & WorldFlags.Editor) != WorldFlags.Editor)
                 {
-                    world.Update();
-                    break;
+                    continue;
                 }
+
+                world.Update();
+                break;
+            }
         }
     }
 }
+
 #endif
