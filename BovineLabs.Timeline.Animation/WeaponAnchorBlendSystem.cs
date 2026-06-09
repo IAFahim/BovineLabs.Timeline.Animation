@@ -138,7 +138,8 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
 
-            private void Execute(Entity entity, ref DynamicBuffer<WeaponAnchorSample> samples, ref LocalTransform transform)
+            private void Execute(Entity entity, ref DynamicBuffer<WeaponAnchorSample> samples,
+                ref LocalTransform transform)
             {
                 if (!AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation))
                     return;

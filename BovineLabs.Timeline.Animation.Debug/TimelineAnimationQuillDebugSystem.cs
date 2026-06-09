@@ -1,10 +1,8 @@
 #if UNITY_EDITOR || BL_DEBUG
 //fully wrong AI made it
-using BovineLabs.Core;
+using System;
 using BovineLabs.Core.ConfigVars;
 using BovineLabs.Quill;
-using BovineLabs.Timeline.Animation;
-using BovineLabs.Timeline.Animation.Data;
 using BovineLabs.Timeline.Data;
 using Rukhanka;
 using Unity.Burst;
@@ -23,28 +21,48 @@ namespace BovineLabs.Timeline.Animation.Debug
         public static readonly SharedStatic<bool> Enabled = SharedStatic<bool>.GetOrCreate<Tags.Enabled>();
 
         [ConfigVar("animation.debug.draw-weight-bars", true, "Draw smoothed weight bars per layer.")]
-        public static readonly SharedStatic<bool> DrawWeightBars = SharedStatic<bool>.GetOrCreate<Tags.DrawWeightBars>();
+        public static readonly SharedStatic<bool>
+            DrawWeightBars = SharedStatic<bool>.GetOrCreate<Tags.DrawWeightBars>();
 
         [ConfigVar("animation.debug.draw-fallback", true, "Draw fallback state arrow.")]
         public static readonly SharedStatic<bool> DrawFallback = SharedStatic<bool>.GetOrCreate<Tags.DrawFallback>();
 
         [ConfigVar("animation.debug.draw-blend-trees", true, "Draw 2D blend tree direction arrows and motion points.")]
-        public static readonly SharedStatic<bool> DrawBlendTrees = SharedStatic<bool>.GetOrCreate<Tags.DrawBlendTrees>();
+        public static readonly SharedStatic<bool>
+            DrawBlendTrees = SharedStatic<bool>.GetOrCreate<Tags.DrawBlendTrees>();
 
         [ConfigVar("animation.debug.draw-clip-labels", true, "Draw clip labels with read kind and progress.")]
-        public static readonly SharedStatic<bool> DrawClipLabels = SharedStatic<bool>.GetOrCreate<Tags.DrawClipLabels>();
+        public static readonly SharedStatic<bool>
+            DrawClipLabels = SharedStatic<bool>.GetOrCreate<Tags.DrawClipLabels>();
 
         [ConfigVar("animation.debug.draw-motions", true, "Draw 2D blend tree motion point map.")]
         public static readonly SharedStatic<bool> DrawMotions = SharedStatic<bool>.GetOrCreate<Tags.DrawMotions>();
 
         private struct Tags
         {
-            public struct Enabled { }
-            public struct DrawWeightBars { }
-            public struct DrawFallback { }
-            public struct DrawBlendTrees { }
-            public struct DrawClipLabels { }
-            public struct DrawMotions { }
+            public struct Enabled
+            {
+            }
+
+            public struct DrawWeightBars
+            {
+            }
+
+            public struct DrawFallback
+            {
+            }
+
+            public struct DrawBlendTrees
+            {
+            }
+
+            public struct DrawClipLabels
+            {
+            }
+
+            public struct DrawMotions
+            {
+            }
         }
     }
 
@@ -70,7 +88,8 @@ namespace BovineLabs.Timeline.Animation.Debug
             if (!TimelineAnimationDebugConfig.Enabled.Data)
                 return;
 
-            var drawer = SystemAPI.GetSingleton<DrawSystem.Singleton>().CreateDrawer<TimelineAnimationQuillDebugSystem>(Category);
+            var drawer = SystemAPI.GetSingleton<DrawSystem.Singleton>()
+                .CreateDrawer<TimelineAnimationQuillDebugSystem>(Category);
 
             if (!drawer.IsEnabled)
                 return;
@@ -85,11 +104,10 @@ namespace BovineLabs.Timeline.Animation.Debug
             {
                 Drawer = drawer,
                 DrawWeightBars = TimelineAnimationDebugConfig.DrawWeightBars.Data,
-                DrawFallback = TimelineAnimationDebugConfig.DrawFallback.Data,
+                DrawFallback = TimelineAnimationDebugConfig.DrawFallback.Data
             }.ScheduleParallel(state.Dependency);
 
             if (TimelineAnimationDebugConfig.DrawBlendTrees.Data)
-            {
                 state.Dependency = new DrawBlendTreeClipJob
                 {
                     Drawer = drawer,
@@ -99,9 +117,8 @@ namespace BovineLabs.Timeline.Animation.Debug
                     TrackDataLookup = trackDataLookup,
                     MotionLookup = motionLookup,
                     DrawClipLabels = TimelineAnimationDebugConfig.DrawClipLabels.Data,
-                    DrawMotions = TimelineAnimationDebugConfig.DrawMotions.Data,
+                    DrawMotions = TimelineAnimationDebugConfig.DrawMotions.Data
                 }.ScheduleParallel(state.Dependency);
-            }
         }
 
         [BurstCompile]
@@ -203,7 +220,8 @@ namespace BovineLabs.Timeline.Animation.Debug
                     Drawer.Circle(origin, new float3(0f, 0.1f, 0f), color);
 
                 if (math.lengthsq(directionClip.PositionOffset) > 0.0001f)
-                    Drawer.Arrow(origin + new float3(0f, 0.2f, 0f), directionClip.PositionOffset * 0.35f, OffsetColor());
+                    Drawer.Arrow(origin + new float3(0f, 0.2f, 0f), directionClip.PositionOffset * 0.35f,
+                        OffsetColor());
 
                 if (DrawClipLabels)
                 {
@@ -230,7 +248,8 @@ namespace BovineLabs.Timeline.Animation.Debug
                 }
             }
 
-            private void DrawMotionMap(float3 center, float2 selectedValue, DynamicBuffer<BlendTree2DMotionData> motions)
+            private void DrawMotionMap(float3 center, float2 selectedValue,
+                DynamicBuffer<BlendTree2DMotionData> motions)
             {
                 const int MaxMotions = 24;
                 const float Scale = 0.32f;
@@ -259,32 +278,67 @@ namespace BovineLabs.Timeline.Animation.Debug
                     BlendDirectionReadKind.ClipValue => "Clip",
                     BlendDirectionReadKind.PhysicsLinearVelocityNormalized => "PhysicsVel",
                     BlendDirectionReadKind.PlayerMoveInput => "MoveInput",
-                    _ => "Unknown",
+                    _ => "Unknown"
                 };
             }
         }
 
         private static Color LayerColor(int layerIndex)
         {
-            return (System.Math.Abs(layerIndex) % 5) switch
+            return (Math.Abs(layerIndex) % 5) switch
             {
                 0 => new Color(0.25f, 0.75f, 1f, 1f),
                 1 => new Color(0.5f, 1f, 0.35f, 1f),
                 2 => new Color(1f, 0.65f, 0.25f, 1f),
                 3 => new Color(0.9f, 0.45f, 1f, 1f),
-                _ => new Color(1f, 1f, 0.35f, 1f),
+                _ => new Color(1f, 1f, 0.35f, 1f)
             };
         }
 
-        private static Color TextColor() => new(1f, 1f, 1f, 1f);
-        private static Color RingColor() => new(0.25f, 0.65f, 1f, 0.75f);
-        private static Color TargetWeightColor() => new(1f, 1f, 1f, 1f);
-        private static Color FallbackColor() => new(1f, 0.35f, 0.35f, 1f);
-        private static Color BlendTreeColor() => new(0.25f, 1f, 0.8f, 1f);
-        private static Color OffsetColor() => new(1f, 0.85f, 0.25f, 1f);
-        private static Color MotionPointColor() => new(0.75f, 0.75f, 0.75f, 1f);
-        private static Color MotionMapLineColor() => new(0.45f, 0.45f, 0.45f, 0.65f);
-        private static Color MotionMapRingColor() => new(0.35f, 0.35f, 0.35f, 0.85f);
+        private static Color TextColor()
+        {
+            return new Color(1f, 1f, 1f, 1f);
+        }
+
+        private static Color RingColor()
+        {
+            return new Color(0.25f, 0.65f, 1f, 0.75f);
+        }
+
+        private static Color TargetWeightColor()
+        {
+            return new Color(1f, 1f, 1f, 1f);
+        }
+
+        private static Color FallbackColor()
+        {
+            return new Color(1f, 0.35f, 0.35f, 1f);
+        }
+
+        private static Color BlendTreeColor()
+        {
+            return new Color(0.25f, 1f, 0.8f, 1f);
+        }
+
+        private static Color OffsetColor()
+        {
+            return new Color(1f, 0.85f, 0.25f, 1f);
+        }
+
+        private static Color MotionPointColor()
+        {
+            return new Color(0.75f, 0.75f, 0.75f, 1f);
+        }
+
+        private static Color MotionMapLineColor()
+        {
+            return new Color(0.45f, 0.45f, 0.45f, 0.65f);
+        }
+
+        private static Color MotionMapRingColor()
+        {
+            return new Color(0.35f, 0.35f, 0.35f, 0.85f);
+        }
     }
 }
 #endif

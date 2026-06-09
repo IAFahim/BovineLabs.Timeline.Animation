@@ -126,7 +126,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
             });
 
             if (ExitIdleClip != null && ExitIdleClip.TryComputeHash(rigDef.GetAvatar(), out var exitIdleHash))
-            {
                 baker.AddComponent(trackEntity, new TrackFallbackOverride
                 {
                     FallbackClipHash = exitIdleHash,
@@ -143,7 +142,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     RemoveStartOffset = true,
                     ApplyFootIK = true
                 });
-            }
 
             // Bake clips
             var clipsToBake = GetClips()
