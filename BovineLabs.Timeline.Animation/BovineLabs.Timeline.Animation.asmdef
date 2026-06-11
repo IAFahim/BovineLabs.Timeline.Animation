@@ -25,7 +25,7 @@
   "excludePlatforms": [],
   "allowUnsafeCode": true,
   "overrideReferences": false,
-  "autoReferenced": true,
+  "autoReferenced": false,
   "defineConstraints": [],
   "versionDefines": [],
   "noEngineReferences": false
