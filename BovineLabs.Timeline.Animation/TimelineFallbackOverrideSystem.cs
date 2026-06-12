@@ -59,6 +59,11 @@ namespace BovineLabs.Timeline.Animation
                 Candidates = candidates,
                 Fallbacks = state.GetComponentLookup<FallbackBlend>()
             }.Schedule(targets, 32, state.Dependency);
+
+            state.Dependency = new RestoreFallbackJob
+            {
+                Candidates = candidates
+            }.ScheduleParallel(state.Dependency);
         }
 
         [BurstCompile]
@@ -115,7 +120,8 @@ namespace BovineLabs.Timeline.Animation
                 if (!hasBest) return;
 
                 var latched = Fallbacks[entity];
-                if (latched.ClipHash == best.FallbackClipHash) return;
+
+                if (FallbackEquality.Matches(in latched, in best)) return;
 
                 Fallbacks[entity] = new FallbackBlend
                 {
@@ -139,6 +145,68 @@ namespace BovineLabs.Timeline.Animation
                     return candidate.LayerIndex > current.LayerIndex;
 
                 return candidate.FallbackClipHash.CompareTo(current.FallbackClipHash) > 0;
+            }
+        }
+
+        [BurstCompile]
+        private partial struct RestoreFallbackJob : IJobEntity
+        {
+            [ReadOnly] public NativeParallelMultiHashMap<Entity, TrackFallbackOverride> Candidates;
+
+            private void Execute(Entity entity, ref FallbackBlend fallback,
+                in DefaultBlendGroupFallback defaultFallback)
+            {
+                if (Candidates.ContainsKey(entity)) return;
+
+                if (FallbackEquality.Matches(in fallback, in defaultFallback)) return;
+
+                fallback = new FallbackBlend
+                {
+                    ClipHash = defaultFallback.ClipHash,
+                    BlendInSpeed = defaultFallback.BlendInSpeed,
+                    BlendOutSpeed = defaultFallback.BlendOutSpeed,
+                    PlaybackMode = defaultFallback.PlaybackMode,
+                    LayerIndex = defaultFallback.LayerIndex,
+                    BlendMode = defaultFallback.BlendMode,
+                    AvatarMaskHash = defaultFallback.AvatarMaskHash,
+                    PositionOffset = defaultFallback.PositionOffset,
+                    RotationOffset = defaultFallback.RotationOffset,
+                    RemoveStartOffset = defaultFallback.RemoveStartOffset,
+                    ApplyFootIK = defaultFallback.ApplyFootIK
+                };
+            }
+        }
+
+        private static class FallbackEquality
+        {
+            public static bool Matches(in FallbackBlend f, in TrackFallbackOverride o)
+            {
+                return f.ClipHash == o.FallbackClipHash
+                    && f.BlendInSpeed == o.BlendInSpeed
+                    && f.BlendOutSpeed == o.BlendOutSpeed
+                    && f.PlaybackMode == o.PlaybackMode
+                    && f.LayerIndex == o.LayerIndex
+                    && f.BlendMode == o.BlendMode
+                    && f.AvatarMaskHash == o.AvatarMaskHash
+                    && f.PositionOffset.Equals(o.PositionOffset)
+                    && f.RotationOffset.Equals(o.RotationOffset)
+                    && f.RemoveStartOffset == o.RemoveStartOffset
+                    && f.ApplyFootIK == o.ApplyFootIK;
+            }
+
+            public static bool Matches(in FallbackBlend f, in DefaultBlendGroupFallback d)
+            {
+                return f.ClipHash == d.ClipHash
+                    && f.BlendInSpeed == d.BlendInSpeed
+                    && f.BlendOutSpeed == d.BlendOutSpeed
+                    && f.PlaybackMode == d.PlaybackMode
+                    && f.LayerIndex == d.LayerIndex
+                    && f.BlendMode == d.BlendMode
+                    && f.AvatarMaskHash == d.AvatarMaskHash
+                    && f.PositionOffset.Equals(d.PositionOffset)
+                    && f.RotationOffset.Equals(d.RotationOffset)
+                    && f.RemoveStartOffset == d.RemoveStartOffset
+                    && f.ApplyFootIK == d.ApplyFootIK;
             }
         }
     }

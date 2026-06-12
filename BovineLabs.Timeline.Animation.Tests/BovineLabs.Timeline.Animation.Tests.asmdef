@@ -6,6 +6,7 @@
     "BovineLabs.Testing",
     "BovineLabs.Timeline.Animation",
     "BovineLabs.Timeline.Animation.Data",
+    "BovineLabs.Timeline.Data",
     "Rukhanka.Runtime",
     "Unity.Burst",
     "Unity.Collections",
