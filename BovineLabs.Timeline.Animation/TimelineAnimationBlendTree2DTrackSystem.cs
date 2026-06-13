@@ -49,9 +49,18 @@ namespace BovineLabs.Timeline.Animation
 
         private const float DirectionEpsilon = 0.0001f;
 
+        private UnsafeComponentLookup<BlendAnimationTree2DTrackData> _trackData;
+        private UnsafeBufferLookup<BlendTree2DMotionData> _motionBuffer;
+        private BufferLookup<BlendGroupEntry> _blendGroup;
+        private BufferLookup<BlendTreePlaybackStateElement> _playbackState;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
+            _trackData = state.GetUnsafeComponentLookup<BlendAnimationTree2DTrackData>(true);
+            _motionBuffer = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true);
+            _blendGroup = state.GetBufferLookup<BlendGroupEntry>();
+            _playbackState = state.GetBufferLookup<BlendTreePlaybackStateElement>();
             state.RequireForUpdate<BlobDatabaseSingleton>();
         }
 
@@ -59,6 +68,11 @@ namespace BovineLabs.Timeline.Animation
         public void OnUpdate(ref SystemState state)
         {
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
+
+            _trackData.Update(ref state);
+            _motionBuffer.Update(ref state);
+            _blendGroup.Update(ref state);
+            _playbackState.Update(ref state);
 
             state.Dependency = new UpdateDynamicBlendParametersJob
             {
@@ -100,10 +114,10 @@ namespace BovineLabs.Timeline.Animation
                 TargetEntities = targetEntities,
                 ClipDataMap = clipDataMap.AsReadOnly(),
                 AnimDB = blobDB.animations,
-                TrackDataLookup = state.GetUnsafeComponentLookup<BlendAnimationTree2DTrackData>(true),
-                MotionBufferLookup = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true),
-                BlendGroupLookup = state.GetBufferLookup<BlendGroupEntry>(),
-                PlaybackStateLookup = state.GetBufferLookup<BlendTreePlaybackStateElement>(),
+                TrackDataLookup = _trackData,
+                MotionBufferLookup = _motionBuffer,
+                BlendGroupLookup = _blendGroup,
+                PlaybackStateLookup = _playbackState,
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
                 IsScrubbing = isScrubbing
             }.Schedule(targetEntities, 64, state.Dependency);

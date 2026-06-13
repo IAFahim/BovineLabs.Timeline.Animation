@@ -24,12 +24,19 @@ namespace BovineLabs.Timeline.Animation
         private NativeList<Entity> uniqueKeys;
         private EntityQuery _query;
 
+        private UnsafeComponentLookup<ClipWeight> _clipWeights;
+        private UnsafeComponentLookup<RukhankaSingleTrackData> _trackData;
+        private BufferLookup<BlendGroupEntry> _animationBuffers;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             activeAnimationsMap = new NativeParallelMultiHashMap<Entity, BlendGroupEntry>(64, Allocator.Persistent);
             uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             _query = SystemAPI.QueryBuilder().WithAll<ClipActive, TimelineActive, RukhankaSingleClipData>().Build();
+            _clipWeights = state.GetUnsafeComponentLookup<ClipWeight>(true);
+            _trackData = state.GetUnsafeComponentLookup<RukhankaSingleTrackData>(true);
+            _animationBuffers = state.GetBufferLookup<BlendGroupEntry>();
             state.RequireForUpdate<BlobDatabaseSingleton>();
         }
 
@@ -49,11 +56,15 @@ namespace BovineLabs.Timeline.Animation
             activeAnimationsMap.Clear();
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
 
+            _clipWeights.Update(ref state);
+            _trackData.Update(ref state);
+            _animationBuffers.Update(ref state);
+
             var gatherJob = new GatherActiveClipsJob
             {
                 AnimDB = blobDB.animations,
-                ClipWeights = state.GetUnsafeComponentLookup<ClipWeight>(true),
-                TrackDataLookup = state.GetUnsafeComponentLookup<RukhankaSingleTrackData>(true),
+                ClipWeights = _clipWeights,
+                TrackDataLookup = _trackData,
                 ActiveAnimations = activeAnimationsMap.AsParallelWriter()
             };
 
@@ -69,7 +80,7 @@ namespace BovineLabs.Timeline.Animation
             {
                 UniqueKeys = uniqueKeys.AsDeferredJobArray(),
                 ActiveAnimations = activeAnimationsMap,
-                AnimationBuffers = state.GetBufferLookup<BlendGroupEntry>()
+                AnimationBuffers = _animationBuffers
             }.Schedule(uniqueKeys, 64, state.Dependency);
         }
 
