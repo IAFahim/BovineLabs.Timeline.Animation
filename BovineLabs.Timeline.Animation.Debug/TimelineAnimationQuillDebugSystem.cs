@@ -1,5 +1,4 @@
 #if UNITY_EDITOR || BL_DEBUG
-//fully wrong AI made it
 using System;
 using BovineLabs.Core.ConfigVars;
 using BovineLabs.Quill;

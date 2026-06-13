@@ -98,13 +98,15 @@ namespace BovineLabs.Timeline.Animation
                 var timeInSeconds = (float)((double)localTime.Value * clipData.TimeScale + clipData.ClipIn);
                 var duration = math.max(MinDuration, clipBlob.Value.length);
 
+                var extrapolation = timeInSeconds < 0f ? clipData.PreExtrapolation : clipData.PostExtrapolation;
+
                 float normalizedTime;
-                if (clipData.PostExtrapolation == TimelineClip.ClipExtrapolation.PingPong)
+                if (extrapolation == TimelineClip.ClipExtrapolation.PingPong)
                 {
                     var t = math.fmod(timeInSeconds, duration * 2f);
                     normalizedTime = (duration - math.abs(t - duration)) / duration;
                 }
-                else if (clipData.PostExtrapolation == TimelineClip.ClipExtrapolation.Loop || clipBlob.Value.looped)
+                else if (extrapolation == TimelineClip.ClipExtrapolation.Loop || clipBlob.Value.looped)
                 {
                     normalizedTime = math.frac(timeInSeconds / duration);
                 }

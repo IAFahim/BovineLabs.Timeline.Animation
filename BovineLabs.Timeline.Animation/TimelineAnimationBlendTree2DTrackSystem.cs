@@ -201,7 +201,7 @@ namespace BovineLabs.Timeline.Animation
                 ClipDataMap.Add(binding.Value, new TrackClipData
                 {
                     Track = track,
-                    AbsoluteTime = (float)localTime.Value,
+                    AbsoluteTime = (float)((double)localTime.Value * directionData.TimeScale + directionData.ClipIn),
                     Direction = directionData.Value,
                     Weight = weight
                 });
@@ -526,7 +526,7 @@ namespace BovineLabs.Timeline.Animation
                             Weight = mw.weight * totalTimelineWeight,
                             AvatarMaskHash = avatarMaskHash,
                             BlendMode = AnimationBlendingMode.Override,
-                            MotionId = ComputeMotionId(trackEntity, trackData.LayerIndex, clipHash),
+                            MotionId = MotionId.Compute(trackEntity, trackData.LayerIndex, clipHash),
                             PositionOffset = trackPosOffset,
                             RotationOffset = trackRotOffset,
                             RemoveStartOffset = hasOffsets,
@@ -536,15 +536,6 @@ namespace BovineLabs.Timeline.Animation
                 }
 
                 internalWeights.Dispose();
-            }
-
-            private uint ComputeMotionId(Entity track, int layerIndex, Hash128 clipHash)
-            {
-                var hash = (uint)track.Index;
-                hash = (hash * 31) ^ (uint)track.Version;
-                hash = (hash * 31) ^ (uint)layerIndex;
-                hash = (hash * 31) ^ (uint)clipHash.GetHashCode();
-                return hash;
             }
 
             /// <summary>
