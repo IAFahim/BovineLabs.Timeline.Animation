@@ -1,0 +1,8 @@
+{
+  "name": "bovinelabs-timeline-animation",
+  "description": "Vex Unity agent skills shipped with BovineLabs Timeline Animation.",
+  "version": "1.0.0",
+  "author": {
+    "name": "BovineLabs"
+  }
+}

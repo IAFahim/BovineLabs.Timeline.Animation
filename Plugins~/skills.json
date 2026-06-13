@@ -1,0 +1,7 @@
+[
+  {
+    "id": "unity-track-animation",
+    "displayName": "Track Animation",
+    "description": "Master of the BovineLabs.Timeline.Animation track family — RukhankaAnimationTrack (layered/masked single-clip playback), BlendTree2DTrack (ECS-driven 2D blend from clip/velocity/move-input), AfterImageTrack (pose-ghost spawner), WeaponAnchorTrack via WeaponAnchorClip (weighted bone attachment) — all bound to a Rukhanka-rigged Animator. The unusual one: clips DRIVE skinned characters, not stage props. Portable to any project containing the package; worked example from vex-ee. Use when a designer asks \\\"play this animation / blend locomotion / leave a motion-blur ghost / stick the sword to the hand during this clip\\\"."
+  }
+]
