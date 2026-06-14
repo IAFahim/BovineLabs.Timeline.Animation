@@ -3,7 +3,9 @@
   "rootNamespace": "",
   "references": [
     "BovineLabs.Core",
+    "BovineLabs.Timeline",
     "BovineLabs.Timeline.Data",
+    "BovineLabs.Reaction.Data",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",

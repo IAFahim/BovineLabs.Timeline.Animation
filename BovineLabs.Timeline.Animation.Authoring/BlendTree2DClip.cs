@@ -44,7 +44,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public override Playable CreatePlayable(PlayableGraph graph, GameObject owner)
         {
             if (!Application.isPlaying)
-                // Return an empty mixer — no animation data to preview per-clip for blend trees
                 return AnimationMixerPlayable.Create(graph);
 
             return base.CreatePlayable(graph, owner);
@@ -59,6 +58,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 if (ReadFrom == null)
                 {
                     Debug.LogError($"{nameof(BlendTree2DClip)} '{name}' needs {nameof(ReadFrom)}.");
+                    base.Bake(clipEntity, context);
                     return;
                 }
 
@@ -66,6 +66,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 {
                     Debug.LogError(
                         $"{nameof(BlendTree2DClip)} '{name}' could not resolve key for '{ReadFrom.name}'.");
+                    base.Bake(clipEntity, context);
                     return;
                 }
 

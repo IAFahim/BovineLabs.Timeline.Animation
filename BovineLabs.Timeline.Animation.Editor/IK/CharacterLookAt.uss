@@ -1,0 +1,19 @@
+.lookat-root {
+    margin-top: 4px;
+}
+
+.lookat-header {
+    -unity-font-style: bold;
+    margin-top: 8px;
+    margin-bottom: 2px;
+}
+
+.lookat-button-row {
+    flex-direction: row;
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.lookat-button-row > Button {
+    flex-grow: 1;
+}

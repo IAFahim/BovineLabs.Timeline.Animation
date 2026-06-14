@@ -16,6 +16,7 @@ namespace BovineLabs.Timeline.Animation
         private ComponentLookup<LocalTransform> _localTransformLookup;
         private ComponentLookup<LocalToWorld> _localToWorldLookup;
         private ComponentLookup<Parent> _parentLookup;
+        private ComponentLookup<PostTransformMatrix> _postTransformMatrixLookup;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -23,6 +24,7 @@ namespace BovineLabs.Timeline.Animation
             _localTransformLookup = state.GetComponentLookup<LocalTransform>(true);
             _localToWorldLookup = state.GetComponentLookup<LocalToWorld>(true);
             _parentLookup = state.GetComponentLookup<Parent>(true);
+            _postTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true);
         }
 
         [BurstCompile]
@@ -31,12 +33,14 @@ namespace BovineLabs.Timeline.Animation
             _localTransformLookup.Update(ref state);
             _localToWorldLookup.Update(ref state);
             _parentLookup.Update(ref state);
+            _postTransformMatrixLookup.Update(ref state);
 
             var job = new FollowPositionJob
             {
                 LocalTransformLookup = _localTransformLookup,
                 LocalToWorldLookup = _localToWorldLookup,
-                ParentLookup = _parentLookup
+                ParentLookup = _parentLookup,
+                PostTransformMatrixLookup = _postTransformMatrixLookup
             };
 
             job.ScheduleParallel();
@@ -48,15 +52,16 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
+            [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
 
             public void Execute(Entity entity, in FollowPositionOnly follow, ref LocalTransform lt)
             {
                 var target = follow.TargetBone;
                 float3 targetPos;
 
-                if (LocalTransformLookup.TryGetComponent(target, out var targetLt) &&
-                    !ParentLookup.HasComponent(target))
-                    targetPos = targetLt.Position;
+                if (BoneWorld.TryComputeWorldMatrix(target, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out var targetWorld))
+                    targetPos = targetWorld.c3.xyz;
                 else if (LocalToWorldLookup.TryGetComponent(target, out var targetL2W))
                     targetPos = targetL2W.Position;
                 else

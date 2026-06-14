@@ -29,12 +29,14 @@ namespace BovineLabs.Timeline.Animation
 
         public void OnUpdate(ref SystemState state)
         {
-            state.CompleteDependency();
-            CollectAndSpawn(ref state);
-            ResetInactiveClips(ref state);
+            var ecb = SystemAPI.GetSingleton<BeginSimulationEntityCommandBufferSystem.Singleton>()
+                .CreateCommandBuffer(state.WorldUnmanaged);
+
+            CollectAndSpawn(ref state, ecb);
+            ResetInactiveClips(ref state, ecb);
         }
 
-        private void CollectAndSpawn(ref SystemState state)
+        private void CollectAndSpawn(ref SystemState state, EntityCommandBuffer ecb)
         {
             var requests = new NativeList<SpawnRequest>(8, Allocator.Temp);
             var atpPool = new NativeList<AnimationToProcessComponent>(64, Allocator.Temp);
@@ -84,20 +86,19 @@ namespace BovineLabs.Timeline.Animation
             for (var i = 0; i < requests.Length; i++)
             {
                 var req = requests[i];
-                var instance = state.EntityManager.Instantiate(req.Prefab);
+                var instance = ecb.Instantiate(req.Prefab);
 
-                if (state.EntityManager.HasComponent<LocalTransform>(instance))
-                    state.EntityManager.SetComponentData(instance, req.RootTransform);
+                if (state.EntityManager.HasComponent<LocalTransform>(req.Prefab))
+                    ecb.SetComponent(instance, req.RootTransform);
 
-                if (req.AtpCount > 0 && state.EntityManager.HasBuffer<AnimationToProcessComponent>(instance))
+                if (req.AtpCount > 0 && state.EntityManager.HasBuffer<AnimationToProcessComponent>(req.Prefab))
                 {
-                    var dstBuf = state.EntityManager.GetBuffer<AnimationToProcessComponent>(instance);
-                    dstBuf.Clear();
+                    var dstBuf = ecb.SetBuffer<AnimationToProcessComponent>(instance);
                     for (var j = 0; j < req.AtpCount; j++)
                         dstBuf.Add(atpPool[req.AtpOffset + j]);
                 }
 
-                state.EntityManager.SetComponentData(req.ClipEntity, new AfterImageClipData
+                ecb.SetComponent(req.ClipEntity, new AfterImageClipData
                 {
                     SpawnedEntity = instance
                 });
@@ -107,29 +108,21 @@ namespace BovineLabs.Timeline.Animation
             requests.Dispose();
         }
 
-        private void ResetInactiveClips(ref SystemState state)
+        private void ResetInactiveClips(ref SystemState state, EntityCommandBuffer ecb)
         {
-            var resetQuery = SystemAPI.QueryBuilder()
-                .WithAll<AfterImageClipData>()
-                .WithNone<ClipActive>()
-                .Build();
-
-            if (resetQuery.IsEmpty) return;
-
-            var entities = resetQuery.ToEntityArray(Allocator.Temp);
-            for (var i = 0; i < entities.Length; i++)
+            foreach (var (clipData, entity) in
+                     SystemAPI.Query<RefRO<AfterImageClipData>>()
+                         .WithNone<ClipActive>()
+                         .WithEntityAccess())
             {
-                var data = state.EntityManager.GetComponentData<AfterImageClipData>(entities[i]);
-                if (data.SpawnedEntity != Entity.Null)
-                {
-                    if (state.EntityManager.Exists(data.SpawnedEntity))
-                        state.EntityManager.DestroyEntity(data.SpawnedEntity);
-                    data.SpawnedEntity = Entity.Null;
-                    state.EntityManager.SetComponentData(entities[i], data);
-                }
-            }
+                var spawnedEntity = clipData.ValueRO.SpawnedEntity;
+                if (spawnedEntity == Entity.Null) continue;
 
-            entities.Dispose();
+                if (state.EntityManager.Exists(spawnedEntity))
+                    ecb.DestroyEntity(spawnedEntity);
+
+                ecb.SetComponent(entity, new AfterImageClipData { SpawnedEntity = Entity.Null });
+            }
         }
     }
 }

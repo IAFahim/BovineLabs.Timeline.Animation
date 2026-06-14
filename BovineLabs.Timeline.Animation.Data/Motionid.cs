@@ -18,7 +18,8 @@ namespace BovineLabs.Timeline.Animation
             h.Update(clipHash.Value.y);
             h.Update(clipHash.Value.z);
             h.Update(clipHash.Value.w);
-            return h.DigestHash64().x;
+            var id = h.DigestHash64().x;
+            return id == Fallback ? Fallback - 1u : id;
         }
     }
 }

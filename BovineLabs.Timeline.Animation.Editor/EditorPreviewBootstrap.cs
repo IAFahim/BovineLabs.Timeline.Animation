@@ -17,9 +17,6 @@ namespace BovineLabs.Timeline.Animation.Editor
         }
     }
 
-    // -------------------------------------------------------------------------
-    // THE FIX: An explicitly ordered group that bypasses ECS attribute sorting.
-    // -------------------------------------------------------------------------
     [WorldSystemFilter(WorldSystemFilterFlags.Editor)]
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateAfter(typeof(TimelineAnimationUnificationSystem))]

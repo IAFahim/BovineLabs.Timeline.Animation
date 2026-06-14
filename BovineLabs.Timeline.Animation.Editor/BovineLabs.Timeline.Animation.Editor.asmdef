@@ -25,7 +25,9 @@
     "Unity.Transforms",
     "Unity.Timeline",
     "Unity.Timeline.Editor",
-    "Rukhanka.Runtime"
+    "Rukhanka.Runtime",
+    "Rukhanka.Hybrid",
+    "BovineLabs.Timeline.EntityLinks.Authoring"
   ],
   "includePlatforms": [
     "Editor"

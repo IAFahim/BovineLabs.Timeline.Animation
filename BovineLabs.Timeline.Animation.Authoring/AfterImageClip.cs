@@ -11,7 +11,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 {
     public sealed class AfterImageClip : DOTSClip, ITimelineClipAsset
     {
-        public override double duration => 20;
+        public override double duration => 0.5;
         public ClipCaps clipCaps => ClipCaps.None;
 
 #if UNITY_EDITOR

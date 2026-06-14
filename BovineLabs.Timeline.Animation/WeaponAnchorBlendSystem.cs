@@ -46,7 +46,9 @@ namespace BovineLabs.Timeline.Animation
 
             state.Dependency = new GatherJob
             {
-                LocalToWorldLookup = state.GetComponentLookup<LocalToWorld>(true),
+                LocalTransformLookup = state.GetComponentLookup<LocalTransform>(true),
+                ParentLookup = state.GetComponentLookup<Parent>(true),
+                PostTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true),
                 ClipWeightLookup = state.GetComponentLookup<ClipWeight>(true),
                 Samples = _samples.AsParallelWriter()
             }.ScheduleParallel(_clipQuery, state.Dependency);
@@ -75,24 +77,28 @@ namespace BovineLabs.Timeline.Animation
         [WithAll(typeof(ClipActive), typeof(TimelineActive))]
         private partial struct GatherJob : IJobEntity
         {
-            [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
+            [ReadOnly] public ComponentLookup<Parent> ParentLookup;
+            [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
             [ReadOnly] public ComponentLookup<ClipWeight> ClipWeightLookup;
             public NativeParallelMultiHashMap<Entity, WeaponAnchorSample>.ParallelWriter Samples;
 
             private void Execute(Entity clipEntity, in WeaponAnchorData anchor, in TrackBinding binding)
             {
-                if (!LocalToWorldLookup.TryGetComponent(anchor.Bone, out var boneL2W)) return;
+                if (!BoneWorld.TryComputeWorldMatrix(anchor.Bone, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out var boneWorld))
+                    return;
 
                 var weight = 1f;
                 if (ClipWeightLookup.TryGetComponent(clipEntity, out var clipWeight))
                     weight = clipWeight.Value;
                 if (weight <= 0f) return;
 
-                var boneRotation = new quaternion(math.orthonormalize(new float3x3(boneL2W.Value)));
+                var boneRotation = new quaternion(math.orthonormalize(new float3x3(boneWorld)));
 
                 Samples.Add(binding.Value, new WeaponAnchorSample
                 {
-                    WorldPosition = math.transform(boneL2W.Value, anchor.LocalPosition),
+                    WorldPosition = math.transform(boneWorld, anchor.LocalPosition),
                     WorldRotation = math.mul(boneRotation, anchor.LocalRotation),
                     Weight = weight
                 });

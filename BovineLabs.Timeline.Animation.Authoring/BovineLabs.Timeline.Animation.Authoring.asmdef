@@ -5,6 +5,7 @@
     "BovineLabs.Core",
     "BovineLabs.Core.Authoring",
     "BovineLabs.Reaction.Authoring",
+    "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline.Authoring",
     "BovineLabs.Timeline.Core.Authoring",
     "BovineLabs.Timeline.EntityLinks.Authoring",

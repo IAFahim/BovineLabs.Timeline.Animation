@@ -4,9 +4,12 @@
   "references": [
     "BovineLabs.Core",
     "BovineLabs.Testing",
+    "BovineLabs.Timeline",
     "BovineLabs.Timeline.Animation",
     "BovineLabs.Timeline.Animation.Data",
     "BovineLabs.Timeline.Data",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline.EntityLinks.Data",
     "Rukhanka.Runtime",
     "Unity.Burst",
     "Unity.Collections",

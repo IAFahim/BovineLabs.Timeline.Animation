@@ -24,7 +24,6 @@ namespace BovineLabs.Timeline.Animation
         public float TimeScale;
         public float MaxSpeed;
 
-        // Added Parity Features
         public float3 PositionOffset;
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
@@ -43,7 +42,6 @@ namespace BovineLabs.Timeline.Animation
         public MotionBlob.Type BlendTreeType;
         public int LayerIndex;
 
-        // Added Parity Features
         public float3 TrackPositionOffset;
         public quaternion TrackRotationOffset;
         public bool ApplyAvatarMask;

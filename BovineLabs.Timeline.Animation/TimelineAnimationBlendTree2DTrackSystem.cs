@@ -41,6 +41,11 @@ namespace BovineLabs.Timeline.Animation
 
             /// <summary>Clip weight from ClipWeight component or default 1.0.</summary>
             public float Weight;
+
+            public float3 PositionOffset;
+            public quaternion RotationOffset;
+            public bool RemoveStartOffset;
+            public bool ApplyFootIK;
         }
 
         private const float WeightEpsilon = 0.0001f;
@@ -54,6 +59,9 @@ namespace BovineLabs.Timeline.Animation
         private BufferLookup<BlendGroupEntry> _blendGroup;
         private BufferLookup<BlendTreePlaybackStateElement> _playbackState;
 
+        private NativeParallelMultiHashMap<Entity, TrackClipData> _clipDataMap;
+        private NativeList<Entity> _targetEntities;
+
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
@@ -61,7 +69,16 @@ namespace BovineLabs.Timeline.Animation
             _motionBuffer = state.GetUnsafeBufferLookup<BlendTree2DMotionData>(true);
             _blendGroup = state.GetBufferLookup<BlendGroupEntry>();
             _playbackState = state.GetBufferLookup<BlendTreePlaybackStateElement>();
+            _clipDataMap = new NativeParallelMultiHashMap<Entity, TrackClipData>(64, Allocator.Persistent);
+            _targetEntities = new NativeList<Entity>(64, Allocator.Persistent);
             state.RequireForUpdate<BlobDatabaseSingleton>();
+        }
+
+        [BurstCompile]
+        public void OnDestroy(ref SystemState state)
+        {
+            if (_clipDataMap.IsCreated) _clipDataMap.Dispose();
+            if (_targetEntities.IsCreated) _targetEntities.Dispose();
         }
 
         [BurstCompile]
@@ -87,21 +104,22 @@ namespace BovineLabs.Timeline.Animation
             var clipCount = SystemAPI.QueryBuilder()
                 .WithAll<BlendTree2DDirectionClipData, ClipActive, TrackBinding, Clip, LocalTime>()
                 .Build().CalculateEntityCount();
-            var clipDataMap = new NativeParallelMultiHashMap<Entity, TrackClipData>(
-                math.max(1, clipCount), Allocator.TempJob);
-            var targetEntities = new NativeList<Entity>(math.max(1, clipCount), Allocator.TempJob);
+            if (_clipDataMap.Capacity < clipCount)
+                _clipDataMap.Capacity = math.max(_clipDataMap.Capacity * 2, clipCount);
+            _clipDataMap.Clear();
+            _targetEntities.Clear();
 
             state.Dependency = new GatherClipDataJob
             {
-                ClipDataMap = clipDataMap.AsParallelWriter(),
+                ClipDataMap = _clipDataMap.AsParallelWriter(),
                 ClipLookup = SystemAPI.GetComponentLookup<Clip>(true),
                 ClipWeightLookup = SystemAPI.GetComponentLookup<ClipWeight>(true)
             }.ScheduleParallel(state.Dependency);
 
             state.Dependency = new ExtractTargetEntitiesJob
             {
-                ClipDataMap = clipDataMap.AsReadOnly(),
-                TargetEntities = targetEntities
+                ClipDataMap = _clipDataMap.AsReadOnly(),
+                TargetEntities = _targetEntities
             }.Schedule(state.Dependency);
 
             var isScrubbing = false;
@@ -111,8 +129,8 @@ namespace BovineLabs.Timeline.Animation
 
             state.Dependency = new DecomposeAndAppendBlendTreeJob
             {
-                TargetEntities = targetEntities,
-                ClipDataMap = clipDataMap.AsReadOnly(),
+                TargetEntities = _targetEntities,
+                ClipDataMap = _clipDataMap.AsReadOnly(),
                 AnimDB = blobDB.animations,
                 TrackDataLookup = _trackData,
                 MotionBufferLookup = _motionBuffer,
@@ -120,10 +138,7 @@ namespace BovineLabs.Timeline.Animation
                 PlaybackStateLookup = _playbackState,
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
                 IsScrubbing = isScrubbing
-            }.Schedule(targetEntities, 64, state.Dependency);
-
-            targetEntities.Dispose(state.Dependency);
-            clipDataMap.Dispose(state.Dependency);
+            }.Schedule(_targetEntities, 64, state.Dependency);
         }
 
         [BurstCompile]
@@ -217,7 +232,11 @@ namespace BovineLabs.Timeline.Animation
                     Track = track,
                     AbsoluteTime = (float)((double)localTime.Value * directionData.TimeScale + directionData.ClipIn),
                     Direction = directionData.Value,
-                    Weight = weight
+                    Weight = weight,
+                    PositionOffset = directionData.PositionOffset,
+                    RotationOffset = directionData.RotationOffset,
+                    RemoveStartOffset = directionData.RemoveStartOffset,
+                    ApplyFootIK = directionData.ApplyFootIK
                 });
             }
         }
@@ -295,6 +314,10 @@ namespace BovineLabs.Timeline.Animation
                         {
                             blend.BestWeight = clipData.Weight;
                             blend.AbsoluteTime = clipData.AbsoluteTime;
+                            blend.PositionOffset = clipData.PositionOffset;
+                            blend.RotationOffset = clipData.RotationOffset;
+                            blend.RemoveStartOffset = clipData.RemoveStartOffset;
+                            blend.ApplyFootIK = clipData.ApplyFootIK;
                         }
 
                         processedTracks[blendIndex] = blend;
@@ -344,6 +367,10 @@ namespace BovineLabs.Timeline.Animation
                         {
                             blend.BestWeight = clipData.Weight;
                             blend.AbsoluteTime = clipData.AbsoluteTime;
+                            blend.PositionOffset = clipData.PositionOffset;
+                            blend.RotationOffset = clipData.RotationOffset;
+                            blend.RemoveStartOffset = clipData.RemoveStartOffset;
+                            blend.ApplyFootIK = clipData.ApplyFootIK;
                         }
 
                         processedTracks[blendIndex] = blend;
@@ -367,7 +394,7 @@ namespace BovineLabs.Timeline.Animation
                 var blendedDirection = new float2(blend.DirectionX, blend.DirectionY) /
                                        math.max(DirectionEpsilon, blend.TotalWeight);
 
-                ProcessTrack(targetEntity, trackEntity, blendedDirection, totalWeight, blend.AbsoluteTime);
+                ProcessTrack(targetEntity, trackEntity, blendedDirection, totalWeight, blend.AbsoluteTime, blend);
             }
 
             private unsafe void ProcessTrack(
@@ -375,7 +402,8 @@ namespace BovineLabs.Timeline.Animation
                 Entity trackEntity,
                 float2 blendedDirection,
                 float totalTimelineWeight,
-                float absoluteTime)
+                float absoluteTime,
+                in PerTrackBlend blend)
             {
                 if (!MotionBufferLookup.TryGetBuffer(trackEntity, out var motions) ||
                     !TrackDataLookup.TryGetComponent(trackEntity, out var trackData) ||
@@ -404,7 +432,7 @@ namespace BovineLabs.Timeline.Animation
 
                     PopulateTrackData(motions, blendTreeClips, blendTreePositions);
                     ProcessTrackMotions(targetEntity, trackEntity, blendedDirection, totalTimelineWeight, absoluteTime,
-                        trackData, blendGroupBuffer, blendTreeClips, blendTreePositions);
+                        trackData, blend, blendGroupBuffer, blendTreeClips, blendTreePositions);
                     return;
                 }
 
@@ -415,7 +443,7 @@ namespace BovineLabs.Timeline.Animation
 
                 PopulateTrackData(motions, heapBlendTreeClips, heapBlendTreePositions);
                 ProcessTrackMotions(targetEntity, trackEntity, blendedDirection, totalTimelineWeight, absoluteTime,
-                    trackData, blendGroupBuffer, heapBlendTreeClips, heapBlendTreePositions);
+                    trackData, blend, blendGroupBuffer, heapBlendTreeClips, heapBlendTreePositions);
 
                 heapBlendTreeClips.Dispose();
                 heapBlendTreePositions.Dispose();
@@ -446,6 +474,7 @@ namespace BovineLabs.Timeline.Animation
                 float totalTimelineWeight,
                 float absoluteTime,
                 in BlendAnimationTree2DTrackData trackData,
+                in PerTrackBlend blend,
                 DynamicBuffer<BlendGroupEntry> blendGroupBuffer,
                 NativeArray<BlobAssetReference<AnimationClipBlob>> blendTreeClips,
                 NativeArray<ScriptedAnimator.BlendTree2DMotionElement> blendTreePositions)
@@ -519,10 +548,12 @@ namespace BovineLabs.Timeline.Animation
                 }
 
                 var avatarMaskHash = trackData.ApplyAvatarMask ? trackData.AvatarMaskHash : default;
-                var trackPosOffset = trackData.TrackPositionOffset;
-                var trackRotOffset = trackData.TrackRotationOffset;
-                var hasOffsets = math.lengthsq(trackPosOffset) > WeightEpsilon ||
-                                 math.lengthsq(trackRotOffset.value.xyz) > WeightEpsilon;
+                var finalPosOffset = trackData.TrackPositionOffset +
+                                     math.rotate(trackData.TrackRotationOffset, blend.PositionOffset);
+                var finalRotOffset = math.mul(trackData.TrackRotationOffset, blend.RotationOffset);
+                var trackHasOffsets = math.lengthsq(trackData.TrackPositionOffset) > WeightEpsilon ||
+                                      math.lengthsq(trackData.TrackRotationOffset.value.xyz) > WeightEpsilon;
+                var removeStartOffset = blend.RemoveStartOffset || trackHasOffsets;
 
                 for (var i = 0; i < internalWeights.Length; i++)
                 {
@@ -541,10 +572,10 @@ namespace BovineLabs.Timeline.Animation
                             AvatarMaskHash = avatarMaskHash,
                             BlendMode = AnimationBlendingMode.Override,
                             MotionId = MotionId.Compute(trackEntity, trackData.LayerIndex, clipHash),
-                            PositionOffset = trackPosOffset,
-                            RotationOffset = trackRotOffset,
-                            RemoveStartOffset = hasOffsets,
-                            ApplyFootIK = true
+                            PositionOffset = finalPosOffset,
+                            RotationOffset = finalRotOffset,
+                            RemoveStartOffset = removeStartOffset,
+                            ApplyFootIK = blend.ApplyFootIK
                         });
                     }
                 }
@@ -614,6 +645,10 @@ namespace BovineLabs.Timeline.Animation
             public float TotalWeight;
             public float BestWeight;
             public float AbsoluteTime;
+            public float3 PositionOffset;
+            public quaternion RotationOffset;
+            public bool RemoveStartOffset;
+            public bool ApplyFootIK;
 
             public int CompareTo(PerTrackBlend other)
             {

@@ -44,6 +44,8 @@ namespace BovineLabs.Timeline.Animation
             state.Dependency = job.ScheduleParallel(state.Dependency);
         }
 
+        private const int LayerSumCapacity = 64;
+
         [BurstCompile]
         private partial struct UnifyAnimationsJob : IJobEntity
         {
@@ -69,7 +71,9 @@ namespace BovineLabs.Timeline.Animation
                     fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
 
                 EmitFallback(ref timer, in fallbackData, baseControl, ref atps);
-                EmitClips(in smoothEntries, baseLayer, baseControl, ref atps);
+
+                var layerSums = AccumulateOverrideSums(in smoothEntries);
+                EmitClips(in smoothEntries, baseLayer, baseControl, in layerSums, ref atps);
 
                 SortByLayer(ref atps);
 
@@ -273,10 +277,28 @@ namespace BovineLabs.Timeline.Animation
                 });
             }
 
+            private static FixedList512Bytes<float> AccumulateOverrideSums(in DynamicBuffer<SmoothBlendGroupEntry> entries)
+            {
+                var sums = default(FixedList512Bytes<float>);
+                sums.Length = LayerSumCapacity;
+                for (var i = 0; i < LayerSumCapacity; i++)
+                    sums[i] = 0f;
+
+                for (var i = 0; i < entries.Length; i++)
+                {
+                    var e = entries[i];
+                    if (e.BlendMode == AnimationBlendingMode.Override && (uint)e.LayerIndex < LayerSumCapacity)
+                        sums[e.LayerIndex] += e.CurrentWeight;
+                }
+
+                return sums;
+            }
+
             private void EmitClips(
                 in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
                 int baseLayer,
                 float baseControl,
+                in FixedList512Bytes<float> layerSums,
                 ref DynamicBuffer<AnimationToProcessComponent> atps)
             {
                 for (var i = 0; i < smoothEntries.Length; i++)
@@ -290,7 +312,9 @@ namespace BovineLabs.Timeline.Animation
 
                     if (s.BlendMode == AnimationBlendingMode.Override)
                     {
-                        var layerSum = OverrideSumForLayer(in smoothEntries, s.LayerIndex);
+                        var layerSum = (uint)s.LayerIndex < LayerSumCapacity
+                            ? layerSums[s.LayerIndex]
+                            : OverrideSumForLayer(in smoothEntries, s.LayerIndex);
 
                         if (s.LayerIndex == baseLayer)
                         {

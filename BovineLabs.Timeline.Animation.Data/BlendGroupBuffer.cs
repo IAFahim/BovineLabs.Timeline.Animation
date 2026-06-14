@@ -57,7 +57,6 @@ namespace BovineLabs.Timeline.Animation
         public AnimationBlendingMode BlendMode;
         public Hash128 AvatarMaskHash;
 
-        // Added Parity Features
         public float3 PositionOffset;
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
