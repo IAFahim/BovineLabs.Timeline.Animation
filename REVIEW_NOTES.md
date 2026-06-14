@@ -32,7 +32,14 @@ Timeline clips/tracks (baked)
 
 ## Findings
 
-### F1 — `EmitFallback` ignores `IsScrubbing` (suspected, ~75–80%, EDITOR-ONLY)
+### F1 — `EmitFallback` ignores `IsScrubbing` — RESOLVED
+
+**Resolved.** `UnifyAnimationsJob.EmitFallback` now computes
+`var fallbackAdvance = (IsScrubbing ? 0f : DeltaTime) / duration;` and both the Hold and
+Loop/Clamp branches add `fallbackAdvance` instead of the raw `DeltaTime / duration`, matching
+the sibling integrators (`IntegrateWeights` line ~175, `IntegrateBaseLayerControl`). Regression
+test added: `UnifyAnimationsBlendMathTests.cs` → `FallbackScrubAdvanceTests`. Original analysis
+retained below.
 
 File: `BovineLabs.Timeline.Animation/TimelineAnimationUnificationSystem.cs`,
 `UnifyAnimationsJob.EmitFallback`.
@@ -90,29 +97,31 @@ Severity: [H]igh / [M]edium / [L]ow. Citations are to files in this package.
 
 ### Correctness
 
-- **C1 [H, ~certain] — BlendTree2D per-clip offsets/footIK/removeStartOffset are dead fields.** *(being fixed in current wave)*
-  `BlendTree2DClip` exposes `positionOffset`/`eulerAnglesOffset`/`removeStartOffset`/`applyFootIK`;
-  `BlendTree2DBuilder` bakes them into `BlendTree2DDirectionClipData`. **No runtime job reads them.**
-  `GatherClipDataJob` reads only `.Value/.TimeScale/.ClipIn`; `DecomposeAndAppendBlendTreeJob`
-  emits `BlendGroupEntry` from **track** offsets and hardcodes `RemoveStartOffset = hasOffsets`,
-  `ApplyFootIK = true`. (`PositionOffset` is read only by the debug system to draw an arrow.)
-  → Those four inspector fields on the blend-tree clip silently do nothing.
-  Contrast the correct single-clip path: `TimelineSingleAnimationTrackSystem.GatherActiveClipsJob`
-  merges `trackData.TrackPositionOffset + rotate(trackRot, clipData.PositionOffset)`.
-  Fix: mirror that merge in the BlendTree2D path, or delete the dead clip fields.
-- **C2 [L] — `MotionId.Fallback = 0xFFFFFFFF` collides with hash space.** `MotionId.Compute`
-  returns a full `uint`; a real clip can (1-in-4B) equal the sentinel and be treated as the
-  fallback in `ReconcileRequests`. Harden (mask a bit / separate flag).
-- **C3 [L, editor-only] — `EmitFallback` ignores `IsScrubbing`.** See F1 above.
-- **C4 [L] — `BlendTree2DClip.Bake` early-returns without `base.Bake`** on link-resolution
-  failure → half-baked clip. The track bakers correctly still call `base.Bake` on `rigDef == null`.
+- **C1 [H, ~certain] — BlendTree2D per-clip offsets/footIK/removeStartOffset are dead fields.** *(RESOLVED)*
+  Fixed: `GatherClipDataJob.Execute` now reads `directionData.PositionOffset/RotationOffset/
+  RemoveStartOffset/ApplyFootIK` into `TrackClipData`; `DecomposeAndAppendBlendTreeJob` carries them
+  through `PerTrackBlend` (best-weight clip wins) and `ProcessTrackMotions` merges them exactly like
+  the single-clip path —
+  `finalPosOffset = trackData.TrackPositionOffset + rotate(trackData.TrackRotationOffset, blend.PositionOffset)`,
+  `finalRotOffset = mul(trackData.TrackRotationOffset, blend.RotationOffset)`,
+  `removeStartOffset = blend.RemoveStartOffset || trackHasOffsets`, `ApplyFootIK = blend.ApplyFootIK`.
+  The four inspector fields now drive the emitted `BlendGroupEntry`.
+- **C2 [L] — `MotionId.Fallback = 0xFFFFFFFF` collides with hash space.** *(RESOLVED)*
+  Fixed: `MotionId.Compute` now ends `return id == Fallback ? Fallback - 1u : id;`, so a computed id
+  can never equal the sentinel. Covered by `MotionIdSentinelTests.Compute_NeverEqualsFallbackSentinel`.
+- **C3 [L, editor-only] — `EmitFallback` ignores `IsScrubbing`.** *(RESOLVED)* See F1 above.
+- **C4 [L] — `BlendTree2DClip.Bake` early-returns without `base.Bake`.** *(RESOLVED)*
+  Fixed: both early returns (missing `ReadFrom`, key-resolution failure) now call `base.Bake(clipEntity, context)`
+  before returning, so the clip is no longer half-baked.
 
 ### Architecture & performance
 
-- **A1 [H] — `AfterImageSpawnSystem` does main-thread structural changes + full sync every frame.** *(being fixed in current wave: moving to an `EntityCommandBuffer`)*
-  Calls `state.CompleteDependency()` then `EntityManager.Instantiate/Destroy/SetComponentData`
-  directly, copying the ATP buffer element-by-element, inside the animation hot group. Per-frame
-  sync point at scale. Move to an `EntityCommandBuffer` and batch.
+- **A1 [H] — `AfterImageSpawnSystem` does main-thread structural changes + full sync every frame.** *(RESOLVED)*
+  Fixed: the system now records all spawns/destroys/sets through a
+  `BeginSimulationEntityCommandBufferSystem` command buffer (`ecb.Instantiate/SetComponent/SetBuffer/DestroyEntity`).
+  No `state.CompleteDependency()` and no direct `EntityManager.Instantiate/Destroy` remain — the per-frame
+  sync point is gone. (Spawn requests are still gathered on the main thread reading source buffers via
+  `EntityManager`, but those are reads, not structural changes.)
 - **A2 [M] — allocation inconsistency.** `TimelineAnimationBlendTree2DTrackSystem` allocates
   `clipDataMap` + `targetEntities` as `TempJob` fresh each frame, and `ScriptedAnimator.ComputeBlendTree2D*`
   returns a `Temp` `NativeList` per track per frame; meanwhile Single / Fallback / WeaponAnchor
@@ -151,21 +160,22 @@ state to diverge), not an edge case.
 
 ### Testing & hygiene
 
-- **T1 [M] — coverage skewed.** `AnimationDataTests` is mostly trivial reflection asserts
-  (is-value-type / default-zero). The valuable test is the `TimelineFallbackOverrideSystem`
-  regression. **Missing the tests that matter:** `UnifyAnimationsJob` blend math (additive vs
-  override normalization, `fallbackWeight = 1 - baseControl`), weight smoothing, and the
-  BlendTree2D offset path — a behavior test there would have caught C1.
+- **T1 [M] — coverage skewed.** *(PARTLY RESOLVED)* `AnimationDataTests` is still mostly trivial
+  reflection asserts. **Now added:** `UnifyAnimationsBlendMathTests` (override base/additional-layer
+  normalization, `fallbackWeight = 1 - baseControl`, bucketed-vs-linear layer sum), `MotionIdSentinelTests`
+  (C2 sentinel), and `FallbackScrubAdvanceTests` (C3 scrub guard). **Still missing:** a full-World
+  behavior test exercising the real `UnifyAnimationsJob` / BlendTree2D offset emission end-to-end
+  (current tests mirror the math via static helpers rather than booting the system).
 - Nits: `Motionid.cs` filename vs `MotionId` type; `PlayerMoveInput` defined in this *Animation*
   package under `BovineLabs.Timeline.PlayerInputs.Data` — placement/coupling smell.
 
 ### Priority order
 
-1. C1 (designer-facing no-op blend-tree offsets)
-2. A1 (after-image sync / structural churn)
+1. ~~C1 (designer-facing no-op blend-tree offsets)~~ — RESOLVED
+2. ~~A1 (after-image sync / structural churn)~~ — RESOLVED
 3. ~~Netcode question (if predicted) → then ghost or recompute the smoothing state~~ — RESOLVED: local-only, dropped
-4. T1 (add the behavior tests that would have caught C1)
-5. Everything else = polish (C2–C4, A2–A6).
+4. T1 (full-World behavior test) — PARTLY RESOLVED: static-helper math/sentinel/scrub tests added; end-to-end system test still open
+5. ~~C2–C4~~ RESOLVED; remaining polish = A2–A6 (allocation consistency, O(n²), stale L2W, additive authoring, AfterImage default).
 
 ## Resolved (was: open / not yet examined deeply)
 

@@ -242,14 +242,16 @@ namespace BovineLabs.Timeline.Animation
 
                 var duration = math.max(MinDuration, fallbackClip.Value.length);
 
+                var fallbackAdvance = (IsScrubbing ? 0f : DeltaTime) / duration;
+
                 if (fallbackData.PlaybackMode == FallbackPlaybackMode.Hold)
                 {
                     if (timer.FallbackAccumulatedTime < 1f)
-                        timer.FallbackAccumulatedTime += DeltaTime / duration;
+                        timer.FallbackAccumulatedTime += fallbackAdvance;
                 }
                 else
                 {
-                    timer.FallbackAccumulatedTime += DeltaTime / duration;
+                    timer.FallbackAccumulatedTime += fallbackAdvance;
                 }
 
                 var fallbackTime = fallbackData.PlaybackMode switch

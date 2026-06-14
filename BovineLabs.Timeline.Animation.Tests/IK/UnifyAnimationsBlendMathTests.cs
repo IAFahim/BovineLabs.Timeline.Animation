@@ -208,4 +208,83 @@ namespace BovineLabs.Timeline.Animation.Tests
             return id == MotionId.Fallback ? MotionId.Fallback - 1u : id;
         }
     }
+
+    /// <summary>
+    ///     Regression coverage for the fallback-clock scrub guard (finding C3 / F1).
+    ///     Mirrors <c>UnifyAnimationsJob.EmitFallback</c>: the fallback accumulated time must
+    ///     advance by DeltaTime during normal playback but freeze while scrubbing, matching the
+    ///     other time integrators (IntegrateWeights / IntegrateBaseLayerControl) in the same job.
+    /// </summary>
+    [TestFixture]
+    public class FallbackScrubAdvanceTests
+    {
+        private const float MinDuration = 0.001f;
+
+        /// <summary>Mirror of the production advance step in <c>EmitFallback</c>.</summary>
+        private static float IntegrateFallback(
+            float accumulated,
+            FallbackPlaybackMode mode,
+            float clipLength,
+            float deltaTime,
+            bool isScrubbing)
+        {
+            var duration = math.max(MinDuration, clipLength);
+            var fallbackAdvance = (isScrubbing ? 0f : deltaTime) / duration;
+
+            if (mode == FallbackPlaybackMode.Hold)
+            {
+                if (accumulated < 1f)
+                    accumulated += fallbackAdvance;
+            }
+            else
+            {
+                accumulated += fallbackAdvance;
+            }
+
+            return accumulated;
+        }
+
+        [Test]
+        public void Loop_DoesNotAdvance_WhileScrubbing()
+        {
+            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 1f, 0.5f, isScrubbing: true);
+            Assert.AreEqual(0.25f, advanced, 1e-6f,
+                "while scrubbing the fallback clock must not free-run by DeltaTime");
+        }
+
+        [Test]
+        public void Loop_AdvancesByDeltaOverDuration_WhilePlaying()
+        {
+            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 2f, 0.5f, isScrubbing: false);
+            Assert.AreEqual(0.25f + (0.5f / 2f), advanced, 1e-6f);
+        }
+
+        [Test]
+        public void Hold_DoesNotAdvance_WhileScrubbing()
+        {
+            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.5f, isScrubbing: true);
+            Assert.AreEqual(0.5f, advanced, 1e-6f);
+        }
+
+        [Test]
+        public void Hold_AdvancesWhilePlaying_ThenLatchesAtOne()
+        {
+            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.25f, isScrubbing: false);
+            Assert.AreEqual(0.75f, advanced, 1e-6f);
+
+            var latched = IntegrateFallback(1f, FallbackPlaybackMode.Hold, 1f, 0.25f, isScrubbing: false);
+            Assert.AreEqual(1f, latched, 1e-6f, "Hold mode must not advance past 1");
+        }
+
+        [Test]
+        public void Scrub_IsStable_AcrossRepeatedFrames()
+        {
+            var accumulated = 0.4f;
+            for (var i = 0; i < 10; i++)
+                accumulated = IntegrateFallback(accumulated, FallbackPlaybackMode.Loop, 1f, 0.5f, isScrubbing: true);
+
+            Assert.AreEqual(0.4f, accumulated, 1e-6f,
+                "repeated scrub frames must leave the fallback clock untouched");
+        }
+    }
 }
