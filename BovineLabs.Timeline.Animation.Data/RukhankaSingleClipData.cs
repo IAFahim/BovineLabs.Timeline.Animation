@@ -8,8 +8,6 @@ namespace BovineLabs.Timeline.Animation
     public struct RukhankaSingleClipData : IComponentData
     {
         public Hash128 ClipHash;
-        public float ClipIn;
-        public float TimeScale;
         public TimelineClip.ClipExtrapolation PreExtrapolation;
         public TimelineClip.ClipExtrapolation PostExtrapolation;
 

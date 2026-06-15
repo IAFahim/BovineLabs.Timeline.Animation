@@ -106,7 +106,7 @@ namespace BovineLabs.Timeline.Animation
                 if (weight <= 0f) return;
                 if (!AnimDB.TryGetValue(clipData.ClipHash, out var clipBlob) || !clipBlob.IsCreated) return;
 
-                var timeInSeconds = (float)((double)localTime.Value * clipData.TimeScale + clipData.ClipIn);
+                var timeInSeconds = (float)(double)localTime.Value;
                 var duration = math.max(MinDuration, clipBlob.Value.length);
 
                 var extrapolation = timeInSeconds < 0f ? clipData.PreExtrapolation : clipData.PostExtrapolation;

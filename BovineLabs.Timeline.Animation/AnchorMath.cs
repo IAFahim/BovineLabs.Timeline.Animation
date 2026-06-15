@@ -40,6 +40,13 @@ namespace BovineLabs.Timeline.Animation
             }
 
             position = accumulatedPosition;
+
+            if (math.lengthsq(accumulatedRotation) < Epsilon)
+            {
+                rotation = new quaternion(reference);
+                return true;
+            }
+
             rotation = math.normalize(new quaternion(accumulatedRotation));
             return true;
         }

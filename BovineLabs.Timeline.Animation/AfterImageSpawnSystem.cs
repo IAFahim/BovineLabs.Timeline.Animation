@@ -97,6 +97,14 @@ namespace BovineLabs.Timeline.Animation
                     for (var j = 0; j < req.AtpCount; j++)
                         dstBuf.Add(atpPool[req.AtpOffset + j]);
                 }
+#if UNITY_EDITOR
+                else if (req.AtpCount > 0)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "[AfterImage] Ghost prefab is missing an AnimationToProcessComponent buffer; the captured " +
+                        "pose was dropped and the ghost will render in bind pose. Give the ghost prefab a rig setup.");
+                }
+#endif
 
                 ecb.SetComponent(req.ClipEntity, new AfterImageClipData
                 {

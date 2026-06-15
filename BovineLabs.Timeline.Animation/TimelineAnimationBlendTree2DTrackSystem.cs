@@ -230,7 +230,7 @@ namespace BovineLabs.Timeline.Animation
                 ClipDataMap.Add(binding.Value, new TrackClipData
                 {
                     Track = track,
-                    AbsoluteTime = (float)((double)localTime.Value * directionData.TimeScale + directionData.ClipIn),
+                    AbsoluteTime = (float)(double)localTime.Value,
                     Direction = directionData.Value,
                     Weight = weight,
                     PositionOffset = directionData.PositionOffset,

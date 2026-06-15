@@ -8,8 +8,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         public float2 BlendParameter;
         public BlendDirectionReadKind ReadKind;
         public ushort ReadLinkKey;
-        public float ClipIn;
-        public float TimeScale;
         public float MaxSpeed;
         public float3 PositionOffset;
         public quaternion RotationOffset;
@@ -24,8 +22,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 Value = BlendParameter,
                 ReadKind = ReadKind,
                 ReadLinkKey = ReadLinkKey,
-                ClipIn = ClipIn,
-                TimeScale = TimeScale,
                 MaxSpeed = MaxSpeed,
                 PositionOffset = PositionOffset,
                 RotationOffset = RotationOffset,

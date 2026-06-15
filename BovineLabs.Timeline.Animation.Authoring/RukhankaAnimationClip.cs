@@ -62,8 +62,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var builder = new RukhankaAnimationBuilder
                 {
                     ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar),
-                    ClipIn = (float)context.Clip.clipIn,
-                    TimeScale = (float)context.Clip.timeScale,
                     PreExtrapolation = context.Clip.preExtrapolationMode,
                     PostExtrapolation = context.Clip.postExtrapolationMode,
                     PositionOffset = positionOffset,

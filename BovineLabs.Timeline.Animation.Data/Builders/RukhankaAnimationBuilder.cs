@@ -8,8 +8,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
     public struct RukhankaAnimationBuilder
     {
         public Hash128 ClipHash;
-        public float ClipIn;
-        public float TimeScale;
         public TimelineClip.ClipExtrapolation PreExtrapolation;
         public TimelineClip.ClipExtrapolation PostExtrapolation;
         public float3 PositionOffset;
@@ -23,8 +21,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             builder.AddComponent(new RukhankaSingleClipData
             {
                 ClipHash = ClipHash,
-                ClipIn = ClipIn,
-                TimeScale = TimeScale,
                 PreExtrapolation = PreExtrapolation,
                 PostExtrapolation = PostExtrapolation,
                 PositionOffset = PositionOffset,

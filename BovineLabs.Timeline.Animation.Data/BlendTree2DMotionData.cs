@@ -20,8 +20,6 @@ namespace BovineLabs.Timeline.Animation
         public ushort ReadLinkKey;
         [CreateProperty] public float2 Value { get; set; }
 
-        public float ClipIn;
-        public float TimeScale;
         public float MaxSpeed;
 
         public float3 PositionOffset;

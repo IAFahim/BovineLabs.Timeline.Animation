@@ -32,7 +32,7 @@ namespace BovineLabs.Timeline.Animation
 
                 current = parent.Value;
                 if (!localTransformLookup.TryGetComponent(current, out var parentTransform))
-                    break;
+                    return false;
 
                 var parentMatrix = parentTransform.ToMatrix();
                 if (postTransformMatrixLookup.TryGetComponent(current, out var parentPostTransform))

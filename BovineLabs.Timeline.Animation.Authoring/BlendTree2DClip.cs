@@ -78,8 +78,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 BlendParameter = BlendParameter,
                 ReadKind = ReadKind,
                 ReadLinkKey = readLinkKey,
-                ClipIn = (float)context.Clip.clipIn,
-                TimeScale = (float)context.Clip.timeScale,
                 MaxSpeed = maxSpeed,
                 PositionOffset = positionOffset,
                 RotationOffset = Quaternion.Euler(eulerAnglesOffset),
