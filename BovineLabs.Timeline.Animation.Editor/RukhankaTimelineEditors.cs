@@ -60,7 +60,7 @@ namespace BovineLabs.Timeline.Animation.Editor
 
                 if (clip != null && clip.asset == asset)
                 {
-                    changed |= MatchSource(clip, clip.parentTrack, resetPlayback, true);
+                    changed |= MatchSource(clip, clip.GetParentTrack(), resetPlayback, true);
                 }
             }
 
@@ -82,7 +82,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             var changed = false;
             var animationClip = asset.animationClipHolder;
             var duration = Math.Max(MinDuration, animationClip.length);
-            var owner = track != null ? track : clip.parentTrack;
+            var owner = track != null ? track : clip.GetParentTrack();
 
             if (recordUndo && owner != null)
             {
