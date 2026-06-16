@@ -59,6 +59,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     avatar = rigDef.GetAvatar();
                 }
 
+                // Register the baked source assets so editing the clip or avatar re-triggers baking.
+                context.Baker.DependsOn(animationClipHolder);
+                context.Baker.DependsOn(avatar);
+
                 var builder = new RukhankaAnimationBuilder
                 {
                     ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar),
