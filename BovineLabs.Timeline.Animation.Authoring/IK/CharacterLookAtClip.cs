@@ -48,6 +48,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
             if (lookTargetLink != null && EntityLinkAuthoringUtility.TryGetKey(lookTargetLink, out var k))
                 key = k;
 
+            if (sourceMode == PointSourceMode.LinkedTarget && key == 0)
+                Debug.LogError($"{nameof(CharacterLookAtClip)} '{name}' uses LinkedTarget but lookTargetLink is unassigned or unresolved; the look-at will do nothing.", this);
+
             var staticOrOffset = sourceMode == PointSourceMode.StaticWorld ? staticWorldPoint : ownerLocalOffset;
 
             var builder = new CharacterLookAtBuilder
