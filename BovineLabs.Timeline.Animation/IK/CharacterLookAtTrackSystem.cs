@@ -97,6 +97,7 @@ namespace BovineLabs.Timeline.Animation
 
         [BurstCompile]
         [WithAll(typeof(ClipActive))]
+        [WithAll(typeof(TimelineActive))]
         private partial struct PrepareJob : IJobEntity
         {
             [ReadOnly] public UnsafeComponentLookup<Targets> TargetsLookup;
