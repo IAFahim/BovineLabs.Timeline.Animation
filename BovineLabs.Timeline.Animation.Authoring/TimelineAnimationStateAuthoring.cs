@@ -6,7 +6,7 @@ using Unity.Entities;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
-namespace BovineLabs.Timeline.Animation.Authoring
+namespace BovineLabs.Timeline.Animation.AuthoringWe
 {
     public class TimelineAnimationStateAuthoring : MonoBehaviour
     {

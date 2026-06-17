@@ -147,10 +147,21 @@ namespace BovineLabs.Timeline.Animation
                 float blendInSpeed,
                 float blendOutSpeed)
             {
+                //	Slew-rate limiter, NOT an exponential. CurrentWeight tracks the timeline clip's OWN eased
+                //	weight (TargetWeight already carries the clip's ease-in/out — its S/F) exactly whenever that
+                //	ease is gentler than the floor, and only rate-limits a HARD CUT (a clip authored with no
+                //	ease) so it doesn't pop. Linear => it actually COMPLETES (the old exp() never reached the
+                //	target and broke short clips). The floor duration is clamped to half the clip length, so a
+                //	short clip can never be over-blended / stuck below full weight.
+                var blendInDur = blendInSpeed <= WeightEpsilon ? 0f : 1f / blendInSpeed;
+                var blendOutDur = blendOutSpeed <= WeightEpsilon ? 0f : 1f / blendOutSpeed;
+
                 for (var i = smoothEntries.Length - 1; i >= 0; i--)
                 {
                     var s = smoothEntries[i];
-                    var speed = s.CurrentWeight < s.TargetWeight ? blendInSpeed : blendOutSpeed;
+
+                    var hasClip = AnimDB.TryGetValue(s.ClipHash, out var clipBlob) && clipBlob.IsCreated;
+                    var clipLen = hasClip ? math.max(MinDuration, clipBlob.Value.length) : MinDuration;
 
                     if (IsScrubbing)
                     {
@@ -158,8 +169,10 @@ namespace BovineLabs.Timeline.Animation
                     }
                     else
                     {
-                        var lerpT = speed <= WeightEpsilon ? 1f : 1f - math.exp(-speed * DeltaTime);
-                        s.CurrentWeight = math.lerp(s.CurrentWeight, s.TargetWeight, lerpT);
+                        var rising = s.TargetWeight >= s.CurrentWeight;
+                        var floorDur = math.min(rising ? blendInDur : blendOutDur, clipLen * 0.5f);
+                        var maxStep = floorDur <= WeightEpsilon ? 1f : DeltaTime / floorDur;
+                        s.CurrentWeight += math.clamp(s.TargetWeight - s.CurrentWeight, -maxStep, maxStep);
                     }
 
                     if (s.CurrentWeight <= WeightEpsilon && s.TargetWeight <= WeightEpsilon)
@@ -168,11 +181,9 @@ namespace BovineLabs.Timeline.Animation
                         continue;
                     }
 
-                    if (s.TargetWeight <= WeightEpsilon && AnimDB.TryGetValue(s.ClipHash, out var clipBlob) &&
-                        clipBlob.IsCreated)
+                    if (s.TargetWeight <= WeightEpsilon && hasClip)
                     {
-                        var duration = math.max(MinDuration, clipBlob.Value.length);
-                        var advance = (IsScrubbing ? 0f : DeltaTime) / duration;
+                        var advance = (IsScrubbing ? 0f : DeltaTime) / clipLen;
                         s.NormalizedTime = clipBlob.Value.looped
                             ? math.frac(s.NormalizedTime + advance)
                             : math.min(1f, s.NormalizedTime + advance);
@@ -189,35 +200,21 @@ namespace BovineLabs.Timeline.Animation
                 float blendInSpeed,
                 float blendOutSpeed)
             {
-                var baseRequested = false;
-                var maxBaseCurrent = 0f;
-
+                //	Fallback is the pure complement of the base-layer clips' OWN (eased) weights, so it follows
+                //	each clip's authored ease (S/F) at any length — no fixed-duration re-ramp on top. Summed then
+                //	saturated so a base->base crossfade stays fully covered (Idle never bleeds through the middle
+                //	of a transition); a lone clip easing in/out lets the fallback fill exactly its complement.
+                var baseSum = 0f;
                 for (var i = 0; i < smoothEntries.Length; i++)
                 {
                     var e = smoothEntries[i];
                     if (e.BlendMode != AnimationBlendingMode.Override || e.LayerIndex != baseLayer)
                         continue;
 
-                    if (e.TargetWeight > WeightEpsilon)
-                        baseRequested = true;
-
-                    maxBaseCurrent = math.max(maxBaseCurrent, e.CurrentWeight);
+                    baseSum += e.CurrentWeight;
                 }
 
-                var target = baseRequested ? 1f : 0f;
-                var speed = timer.BaseLayerControl < target ? blendInSpeed : blendOutSpeed;
-
-                if (IsScrubbing)
-                {
-                    timer.BaseLayerControl = target;
-                }
-                else
-                {
-                    var lerpT = speed <= WeightEpsilon ? 1f : 1f - math.exp(-speed * DeltaTime);
-                    timer.BaseLayerControl = math.lerp(timer.BaseLayerControl, target, lerpT);
-                }
-
-                return math.saturate(math.max(timer.BaseLayerControl, maxBaseCurrent));
+                return math.saturate(baseSum);
             }
 
             private void EmitFallback(
