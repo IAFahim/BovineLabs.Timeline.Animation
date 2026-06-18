@@ -26,11 +26,28 @@ namespace BovineLabs.Timeline.Animation.Editor
         {
             base.OnCreate();
 
-            // Add systems in the EXACT order they must execute.
+            // Mirror RukhankaSystemsBootstrap's runtime order exactly: Process -> IK injection -> Application.
+            // Order is fixed by hand (no sorting), so insertion order IS execution order.
+            EnableSystemSorting = false;
+
             // 1. Process System computes/resizes the animation buffers.
             AddSystemToUpdateList(World.GetOrCreateSystem<AnimationProcessSystem>());
-            EnableSystemSorting = false;
-            // 2. Application System applies them to the Entity transforms.
+
+            // 2. IK injection pass (AimIK look-at, two-bone foot IK, FABRIK, override, dynamic bones).
+            //    Rukhanka's IK systems carry no Editor world-filter, so they are NOT auto-created in
+            //    this preview world the way they are in the game world. Create each explicitly and add
+            //    it to the injection group, then let the group sort them by their own
+            //    OrderFirst/UpdateAfter attributes (DynamicBoneChain first, TwoBoneIK after AimIK+FABRIK).
+            var ikGroup = World.GetOrCreateSystemManaged<RukhankaAnimationInjectionSystemGroup>();
+            ikGroup.AddSystemToUpdateList(World.GetOrCreateSystem<DynamicBoneChainSystem>());
+            ikGroup.AddSystemToUpdateList(World.GetOrCreateSystem<AimIKSystem>());
+            ikGroup.AddSystemToUpdateList(World.GetOrCreateSystem<FABRIKSystem>());
+            ikGroup.AddSystemToUpdateList(World.GetOrCreateSystem<TwoBoneIKSystem>());
+            ikGroup.AddSystemToUpdateList(World.GetOrCreateSystem<OverrideTransformIKSystem>());
+            ikGroup.SortSystems();
+            AddSystemToUpdateList(ikGroup);
+
+            // 3. Application System applies the final (post-IK) pose to the Entity transforms.
             AddSystemToUpdateList(World.GetOrCreateSystem<AnimationApplicationSystem>());
         }
     }

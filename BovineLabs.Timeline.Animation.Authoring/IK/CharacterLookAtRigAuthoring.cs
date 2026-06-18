@@ -1,4 +1,3 @@
-using BovineLabs.Timeline.EntityLinks.Authoring;
 using Unity.Entities;
 using UnityEngine;
 
@@ -23,8 +22,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public float angleLimitMax = 80f;
 
         [Header("Target")]
-        public EntityLinkSchema lookTargetSchema;
-
         public Transform lookAtTarget;
 
         private class CharacterLookAtRigBaker : Baker<CharacterLookAtRigAuthoring>

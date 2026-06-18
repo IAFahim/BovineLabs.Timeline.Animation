@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using BovineLabs.Timeline.Animation.Authoring;
-using BovineLabs.Timeline.EntityLinks.Authoring;
 using Rukhanka.Hybrid;
 using UnityEditor;
 using UnityEngine;
@@ -49,12 +48,6 @@ namespace BovineLabs.Timeline.Animation.Editor
                 build.clicked += () => BuildRig(createTargetToggle is { value: true });
             }
 
-            var createSchema = root.Q<Button>("createSchemaButton");
-            if (createSchema != null)
-            {
-                createSchema.clicked += CreateSchema;
-            }
-
             root.schedule.Execute(() => RefreshValidation(root)).Every(250);
 
             return root;
@@ -99,7 +92,6 @@ namespace BovineLabs.Timeline.Animation.Editor
             SetVisible(root.Q<HelpBox>("noAnimator"), animator == null);
             SetVisible(root.Q<HelpBox>("bonesUnset"), rig.neckBone == null || rig.headBone == null);
             SetVisible(root.Q<HelpBox>("forwardNotUnit"), !IsUnitLength(rig.forwardVector));
-            SetVisible(root.Q<HelpBox>("schemaUnset"), rig.lookTargetSchema == null);
             SetVisible(root.Q<HelpBox>("targetUnset"), rig.lookAtTarget == null);
         }
 
@@ -181,36 +173,6 @@ namespace BovineLabs.Timeline.Animation.Editor
             EditorUtility.SetDirty(aimIK);
 
             Undo.CollapseUndoOperations(group);
-        }
-
-        private void CreateSchema()
-        {
-            var rig = target as CharacterLookAtRigAuthoring;
-            if (rig == null)
-            {
-                return;
-            }
-
-            var defaultName = $"{rig.gameObject.name}_LookAtSchema.asset";
-            var path = EditorUtility.SaveFilePanelInProject(
-                "Create Look-At Schema",
-                defaultName,
-                "asset",
-                "Choose where to save the EntityLinkSchema asset.");
-
-            if (string.IsNullOrEmpty(path))
-            {
-                return;
-            }
-
-            var schema = CreateInstance<EntityLinkSchema>();
-            AssetDatabase.CreateAsset(schema, path);
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
-
-            Undo.RecordObject(rig, "Assign Look-At Schema");
-            rig.lookTargetSchema = schema;
-            EditorUtility.SetDirty(rig);
         }
 
         private static Animator ResolveHumanoidAnimator(CharacterLookAtRigAuthoring rig)

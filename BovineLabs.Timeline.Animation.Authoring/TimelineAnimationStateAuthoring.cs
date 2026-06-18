@@ -6,7 +6,7 @@ using Unity.Entities;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
-namespace BovineLabs.Timeline.Animation.AuthoringWe
+namespace BovineLabs.Timeline.Animation.Authoring
 {
     public class TimelineAnimationStateAuthoring : MonoBehaviour
     {
@@ -63,11 +63,12 @@ namespace BovineLabs.Timeline.Animation.AuthoringWe
             private (Hash128 hash, BlobAssetReference<AnimationClipBlob> blob) BakeFallbackAnimation(
                 TimelineAnimationStateAuthoring authoring, Avatar avatar, Entity entity)
             {
-                var fallbackHash = BakingUtils.ComputeAnimationHash(authoring.fallbackAnimationClip, avatar);
+                // Foot-IK variant must match between the referenced hash and the baked blob (see ComputeAnimationHash overload).
+                var fallbackHash = BakingUtils.ComputeAnimationHash(authoring.fallbackAnimationClip, avatar, authoring.applyFootIK);
                 var animationBaker = new AnimationClipBaker();
                 singleClipBuffer[0] = authoring.fallbackAnimationClip;
                 var bakedAnimations =
-                    animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject);
+                    animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject, authoring.applyFootIK);
                 singleClipBuffer[0] = null;
 
                 BlobAssetReference<AnimationClipBlob> fallbackBlob = default;

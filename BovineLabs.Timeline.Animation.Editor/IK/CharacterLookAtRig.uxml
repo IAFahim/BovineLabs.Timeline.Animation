@@ -13,10 +13,8 @@
         <ui:Slider name="maxAngleSlider" binding-path="angleLimitMax" label="Max Angle" low-value="-180" high-value="180" show-input-field="true" />
 
         <ui:Label text="Target" class="lookat-header" />
-        <uie:PropertyField name="lookTargetSchema" binding-path="lookTargetSchema" label="Look Target Schema" />
         <uie:PropertyField name="lookAtTarget" binding-path="lookAtTarget" label="Look At Target" />
         <ui:Toggle name="createTargetToggle" label="Create target if missing on Build" value="true" />
-        <ui:Button name="createSchemaButton" text="Create Look-At Schema" />
 
         <ui:Label text="Setup" class="lookat-header" />
         <ui:Button name="buildButton" text="Build Look-At Rig" />
@@ -25,7 +23,6 @@
             <ui:HelpBox name="noAnimator" message-type="Error" text="No Humanoid Animator found on this object or its parents." />
             <ui:HelpBox name="bonesUnset" message-type="Warning" text="Neck and/or Head bone is not assigned. Use Auto-Detect or assign manually." />
             <ui:HelpBox name="forwardNotUnit" message-type="Warning" text="Forward Vector is not unit length. Aim direction may be scaled or unstable." />
-            <ui:HelpBox name="schemaUnset" message-type="Warning" text="Look Target Schema is unset. Linked-target look-at clips will not resolve. Create or assign one." />
             <ui:HelpBox name="targetUnset" message-type="Warning" text="Look At Target is unset. Build can create one for you, or assign a Transform." />
         </ui:VisualElement>
     </ui:VisualElement>

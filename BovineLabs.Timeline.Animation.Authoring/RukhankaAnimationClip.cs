@@ -65,7 +65,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
                 var builder = new RukhankaAnimationBuilder
                 {
-                    ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar),
+                    // Must match the variant baked by RukhankaAnimationTrack (foot-IK on/off → different blob hash).
+                    ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar, applyFootIK),
                     PreExtrapolation = context.Clip.preExtrapolationMode,
                     PostExtrapolation = context.Clip.postExtrapolationMode,
                     PositionOffset = positionOffset,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using BovineLabs.Timeline.Authoring;
@@ -132,27 +133,46 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 });
             }
 
-            var clipsToBake = GetClips()
+            var clipComponents = GetClips()
                 .Select(c => c.asset as RukhankaAnimationClip)
                 .Where(h => h?.animationClipHolder != null)
-                .Select(h => h.animationClipHolder)
-                .ToHashSet();
+                .ToList();
 
+            // Foot IK is baked into the clip blob, so a clip's applyFootIK flag selects which blob variant to
+            // bake/reference (see ComputeAnimationHash overload). Group by flag; the same clip asset used both
+            // with and without foot IK is baked in BOTH variants (different hashes), so do not merge the sets.
+            var footIkOnClips = clipComponents.Where(h => h.applyFootIK).Select(h => h.animationClipHolder).ToHashSet();
+            var footIkOffClips = clipComponents.Where(h => !h.applyFootIK).Select(h => h.animationClipHolder).ToHashSet();
+
+            // ExitIdle fallback is baked foot-IK on (TrackFallbackOverride.ApplyFootIK = true above).
             if (ExitIdleClip != null)
             {
-                clipsToBake.Add(ExitIdleClip);
+                footIkOnClips.Add(ExitIdleClip);
             }
 
-            if (clipsToBake.Count > 0)
+            if (footIkOnClips.Count > 0 || footIkOffClips.Count > 0)
             {
-                var bakedAnimations = new AnimationClipBaker().BakeAnimations(baker, clipsToBake.ToArray(), rigDef.GetAvatar(), rigDef.gameObject);
                 var e = baker.CreateAdditionalEntity(TransformUsageFlags.None, false, name + "_AnimationAssets");
                 var buffer = baker.AddBuffer<NewBlobAssetDatabaseRecord<AnimationClipBlob>>(e);
-                buffer.AddValidAnimations(bakedAnimations);
 
-                if (bakedAnimations.IsCreated)
+                BakeClipVariant(footIkOnClips, true);
+                BakeClipVariant(footIkOffClips, false);
+
+                void BakeClipVariant(HashSet<AnimationClip> clips, bool applyFootIK)
                 {
-                    bakedAnimations.Dispose();
+                    if (clips.Count == 0)
+                    {
+                        return;
+                    }
+
+                    var baked = new AnimationClipBaker().BakeAnimations(
+                        baker, clips.ToArray(), rigDef.GetAvatar(), rigDef.gameObject, applyFootIK);
+                    buffer.AddValidAnimations(baked);
+
+                    if (baked.IsCreated)
+                    {
+                        baked.Dispose();
+                    }
                 }
             }
 
