@@ -94,11 +94,18 @@ namespace BovineLabs.Timeline.Animation
                     weight = clipWeight.Value;
                 if (weight <= 0f) return;
 
+                // Build ONE rigid frame from the bone — world position + orthonormal rotation, scale dropped —
+                // and apply the grip offset in it. Rukhanka retargeted humanoid bones carry non-uniform scale;
+                // the old code transformed the offset by the full bone matrix (math.transform, scale included)
+                // while orthonormalizing the rotation (scale stripped), so the grip drifted off the hand and the
+                // error shifted as the bone scale animated. A rigid frame keeps the offset a stable metres-space
+                // attachment oriented by the bone.
+                var bonePosition = boneWorld.c3.xyz;
                 var boneRotation = new quaternion(math.orthonormalize(new float3x3(boneWorld)));
 
                 Samples.Add(binding.Value, new WeaponAnchorSample
                 {
-                    WorldPosition = math.transform(boneWorld, anchor.LocalPosition),
+                    WorldPosition = bonePosition + math.mul(boneRotation, anchor.LocalPosition),
                     WorldRotation = math.mul(boneRotation, anchor.LocalRotation),
                     Weight = weight
                 });

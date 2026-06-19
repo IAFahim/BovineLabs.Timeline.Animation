@@ -31,28 +31,38 @@ DOTS path. The good news: every primitive we need already exists; nothing exotic
   `IAnimatedComponent<T>`, `Active<X>` `IEnableableComponent`, edge-triggered via `ClipActive`/`ClipActivePrevious`,
   `TrackBinding.Value` = bound entity).
 
-## Architecture — "kinematic-follow, then go dynamic" (standard active ragdoll)
-A parallel ragdoll skeleton of physics capsules shadows the animated rig; a two-way bridge switches who drives whom:
+## Architecture — "snap on enable, then go dynamic" (OFF is FREE)
+A parallel ragdoll skeleton of physics capsules sits dormant next to the rig; the switch is edge-triggered,
+so off-state costs nothing:
 
-- **Ragdoll OFF (default):** physics bodies = **Kinematic**, each frame driven to match its animated bone's
-  world pose (so they sit exactly on the visual bones, ready to go). `OverrideTransformIK` = **disabled**
-  (animation drives the visual bones).
-- **Ragdoll ON (clip active):** bodies flip **Dynamic** (`PhysicsMassOverride.IsKinematic=0`) → simulate under
-  gravity + joint limits. `OverrideTransformIK` = **enabled** → visual bones follow the simulating bodies.
-- Because the bodies tracked the animation right up to the switch, the transition is seamless. (Velocity
-  inheritance for momentum is a Phase-3 refinement; v1 starts from rest or approximates from pose delta.)
+- **Ragdoll OFF (default) — zero per-frame cost:** the physics bodies are **disabled** (`Disabled` / out of the
+  physics world → no broadphase, no sim); `OverrideTransformIK` is **disabled** so `OverrideTransformIKSystem`
+  (which has `RequireForUpdate` on its query) **doesn't run at all**; **no follow system runs**. State ≈ a
+  dormant archetype. Only normal animation executes.
+- **On ENABLE (one-time, edge):** snapshot the current animated bone world poses → teleport each body onto its
+  bone (+ optional velocity seed for momentum), flip bodies **Dynamic** (`PhysicsMassOverride.IsKinematic=0`),
+  enable the bones' `OverrideTransformIK`. ~11 bodies, one frame — imperceptible, and seamless because the snap
+  happens at the instant of switching.
+- **Ragdoll ON:** physics simulates the bodies under gravity + joint limits; `OverrideTransformIK` makes the
+  visual bones follow the bodies. This is the ONLY time ragdoll work happens.
+- **On DISABLE:** disable `OverrideTransformIK`, disable/kinematic the bodies → back to free. (Blend-back/get-up
+  = Phase 3.)
 
-Ordering: kinematic-follow runs after `AnimationApplicationSystem`, before `PhysicsSystemGroup`;
-`OverrideTransformIK` reads post-sim body `LocalToWorld` next frame (1 fixed-step latency, acceptable).
+NOTE: continuous kinematic-follow was rejected — it would make OFF non-free for no benefit (its only upside is
+using the capsules as live hitboxes on the animated character, a separate opt-in feature). Ordering: the
+enable-snapshot runs after `AnimationApplicationSystem`; `OverrideTransformIK` reads post-sim body `LocalToWorld`
+(1 fixed-step latency while ON, acceptable).
 
 ## Components & where they live (mirrors the 6-assembly layout)
 - `*.Data`: `RagdollData{bool Enable}`, `RagdollAnimated : IAnimatedComponent<RagdollData>`,
   `ActiveRagdoll : IComponentData, IEnableableComponent`, `RagdollState` (restore), plus a
   `RagdollBodyLink { Entity Bone; Entity Body }` buffer/component tying each physics body to its rig bone.
 - `*.Authoring`: `RagdollAuthoring` (the generator — see Phase 2), `RagdollTrack`/`RagdollClip` (+ builder).
-- `*`(runtime): `RagdollKinematicFollowSystem` (OFF: bones→bodies), `RagdollTrackSystem` (clip→ActiveRagdoll,
-  the while-active edge machine cloned from PhysicsKinematicOverride), `RagdollApplySystem`
-  (ActiveRagdoll → set each body's `PhysicsMassOverride.IsKinematic` + enable/disable the bones' `OverrideTransformIK`).
+- `*`(runtime): `RagdollApplySystem` — edge-triggered on `ActiveRagdoll` (IEnableableComponent): on the
+  enable edge, snapshot animated bone world poses → set each body's transform (+velocity), remove `Disabled`,
+  set `PhysicsMassOverride.IsKinematic=0`, enable the bones' `OverrideTransformIK`; on the disable edge, reverse
+  it (disable IK, re-disable/kinematic bodies). NO per-frame follow system. The later `RagdollTrackSystem`
+  (Timeline) just toggles `ActiveRagdoll`; a plain component/API toggle works identically for non-timeline use.
 
 ## The enable/disable clip (your explicit ask)
 `RagdollTrack : DOTSTrack` `[TrackClipType(RagdollClip)] [TrackBindingType(GameObject)]` bound to the rig.
