@@ -37,8 +37,16 @@ namespace BovineLabs.Timeline.Animation.Debug
         [ConfigVar("animation.debug.draw-motions", true, "Draw 2D blend tree motion point map.")]
         public static readonly SharedStatic<bool> DrawMotions = SharedStatic<bool>.GetOrCreate<Tags.DrawMotions>();
 
+        [ConfigVar("animation.debug.draw-summary", true,
+            "Draw the AnimationDebugState summary line (track/clip counts, fallback weight).")]
+        public static readonly SharedStatic<bool> DrawSummary = SharedStatic<bool>.GetOrCreate<Tags.DrawSummary>();
+
         private struct Tags
         {
+            public struct DrawSummary
+            {
+            }
+
             public struct Enabled
             {
             }
@@ -103,7 +111,9 @@ namespace BovineLabs.Timeline.Animation.Debug
             {
                 Drawer = drawer,
                 DrawWeightBars = TimelineAnimationDebugConfig.DrawWeightBars.Data,
-                DrawFallback = TimelineAnimationDebugConfig.DrawFallback.Data
+                DrawFallback = TimelineAnimationDebugConfig.DrawFallback.Data,
+                DrawSummary = TimelineAnimationDebugConfig.DrawSummary.Data,
+                DebugStateLookup = SystemAPI.GetComponentLookup<AnimationDebugState>(true)
             }.ScheduleParallel(state.Dependency);
 
             if (TimelineAnimationDebugConfig.DrawBlendTrees.Data)
@@ -126,6 +136,9 @@ namespace BovineLabs.Timeline.Animation.Debug
             public Drawer Drawer;
             public bool DrawWeightBars;
             public bool DrawFallback;
+            public bool DrawSummary;
+
+            [ReadOnly] public ComponentLookup<AnimationDebugState> DebugStateLookup;
 
             private void Execute(
                 Entity entity,
@@ -137,6 +150,21 @@ namespace BovineLabs.Timeline.Animation.Debug
             {
                 var root = localToWorld.Position;
                 var header = root + new float3(0f, 2.15f, 0f);
+
+                // Surface the AnimationDebugState summary (computed by AnimationDebugSystem) when present.
+                if (DrawSummary && DebugStateLookup.TryGetComponent(entity, out var dbg))
+                {
+                    var summary = default(FixedString128Bytes);
+                    summary.Append("trk:");
+                    summary.Append(dbg.ActiveTrackCount);
+                    summary.Append(" clp:");
+                    summary.Append(dbg.ActiveClipCount);
+                    summary.Append(" fbw:");
+                    summary.Append(dbg.FallbackWeight);
+                    summary.Append(" fad:");
+                    summary.Append(dbg.FallbackTrackCount);
+                    Drawer.Text128(header + new float3(0f, 0.2f, 0f), summary, TextColor(), 10f);
+                }
 
                 var label = default(FixedString128Bytes);
                 label.Append("Anim ");
