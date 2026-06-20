@@ -14,55 +14,55 @@ namespace BovineLabs.Timeline.Animation
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineFallbackOverrideSystem : ISystem
     {
-        private NativeParallelMultiHashMap<Entity, TrackFallbackOverride> candidates;
-        private NativeList<Entity> targets;
-        private EntityQuery activeClips;
+        private NativeParallelMultiHashMap<Entity, TrackFallbackOverride> _candidates;
+        private NativeList<Entity> _targets;
+        private EntityQuery _activeClips;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            candidates = new NativeParallelMultiHashMap<Entity, TrackFallbackOverride>(64, Allocator.Persistent);
-            targets = new NativeList<Entity>(64, Allocator.Persistent);
-            activeClips = SystemAPI.QueryBuilder()
+            _candidates = new NativeParallelMultiHashMap<Entity, TrackFallbackOverride>(64, Allocator.Persistent);
+            _targets = new NativeList<Entity>(64, Allocator.Persistent);
+            _activeClips = SystemAPI.QueryBuilder()
                 .WithAll<ClipActive, TimelineActive, Clip, TrackBinding>().Build();
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (candidates.IsCreated) candidates.Dispose();
-            if (targets.IsCreated) targets.Dispose();
+            if (_candidates.IsCreated) _candidates.Dispose();
+            if (_targets.IsCreated) _targets.Dispose();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var count = activeClips.CalculateEntityCountWithoutFiltering();
-            if (candidates.Capacity < count) candidates.Capacity = count;
-            candidates.Clear();
+            var count = _activeClips.CalculateEntityCountWithoutFiltering();
+            if (_candidates.Capacity < count) _candidates.Capacity = count;
+            _candidates.Clear();
 
             state.Dependency = new GatherOverridesJob
             {
                 TrackOverrides = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
-                Candidates = candidates.AsParallelWriter()
+                Candidates = _candidates.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
 
             state.Dependency = new ExtractKeysJob
             {
-                Candidates = candidates,
-                Targets = targets
+                Candidates = _candidates,
+                Targets = _targets
             }.Schedule(state.Dependency);
 
             state.Dependency = new LatchFallbackJob
             {
-                Targets = targets.AsDeferredJobArray(),
-                Candidates = candidates,
+                Targets = _targets.AsDeferredJobArray(),
+                Candidates = _candidates,
                 Fallbacks = state.GetComponentLookup<FallbackBlend>()
-            }.Schedule(targets, 32, state.Dependency);
+            }.Schedule(_targets, 32, state.Dependency);
 
             state.Dependency = new RestoreFallbackJob
             {
-                Candidates = candidates
+                Candidates = _candidates
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -158,22 +158,11 @@ namespace BovineLabs.Timeline.Animation
             {
                 if (Candidates.ContainsKey(entity)) return;
 
-                if (FallbackEquality.Matches(in fallback, in defaultFallback)) return;
+                ref readonly var reset = ref defaultFallback.Value.Value;
 
-                fallback = new FallbackBlend
-                {
-                    ClipHash = defaultFallback.ClipHash,
-                    BlendInSpeed = defaultFallback.BlendInSpeed,
-                    BlendOutSpeed = defaultFallback.BlendOutSpeed,
-                    PlaybackMode = defaultFallback.PlaybackMode,
-                    LayerIndex = defaultFallback.LayerIndex,
-                    BlendMode = defaultFallback.BlendMode,
-                    AvatarMaskHash = defaultFallback.AvatarMaskHash,
-                    PositionOffset = defaultFallback.PositionOffset,
-                    RotationOffset = defaultFallback.RotationOffset,
-                    RemoveStartOffset = defaultFallback.RemoveStartOffset,
-                    ApplyFootIK = defaultFallback.ApplyFootIK
-                };
+                if (FallbackEquality.Matches(in fallback, in reset)) return;
+
+                fallback = reset;
             }
         }
 
@@ -194,7 +183,7 @@ namespace BovineLabs.Timeline.Animation
                     && f.ApplyFootIK == o.ApplyFootIK;
             }
 
-            public static bool Matches(in FallbackBlend f, in DefaultBlendGroupFallback d)
+            public static bool Matches(in FallbackBlend f, in FallbackBlend d)
             {
                 return f.ClipHash == d.ClipHash
                     && f.BlendInSpeed == d.BlendInSpeed

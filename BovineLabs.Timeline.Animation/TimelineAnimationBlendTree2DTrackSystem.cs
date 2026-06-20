@@ -195,11 +195,11 @@ namespace BovineLabs.Timeline.Animation
                 {
                     if (PlayerMoveInputLookup.TryGetComponent(resolvedEntity, out var moveInput))
                     {
-                        var vel2d = moveInput.Value;
-                        var lengthSq = math.lengthsq(vel2d);
+                        var vel2D = moveInput.Value;
+                        var lengthSq = math.lengthsq(vel2D);
                         clipData.Value = lengthSq > 1f
-                            ? vel2d / math.sqrt(lengthSq)
-                            : vel2d;
+                            ? vel2D / math.sqrt(lengthSq)
+                            : vel2D;
                     }
                     else
                     {

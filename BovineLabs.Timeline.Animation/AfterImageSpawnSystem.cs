@@ -59,8 +59,8 @@ namespace BovineLabs.Timeline.Animation
                 var rootTransform = LocalTransform.Identity;
                 if (state.EntityManager.HasComponent<LocalToWorld>(source))
                 {
-                    var l2w = state.EntityManager.GetComponentData<LocalToWorld>(source);
-                    rootTransform = LocalTransform.FromPositionRotation(l2w.Position, l2w.Rotation);
+                    var l2W = state.EntityManager.GetComponentData<LocalToWorld>(source);
+                    rootTransform = LocalTransform.FromPositionRotation(l2W.Position, l2W.Rotation);
                 }
 
                 var atpOffset = atpPool.Length;

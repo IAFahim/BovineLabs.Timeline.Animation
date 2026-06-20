@@ -69,12 +69,11 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 blob, hash, _playbackMode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK);
         }
 
-        public void ApplyTo<T>(ref T builder)
-            where T : struct, IEntityCommands
+        // The fallback the actor blends to when no timeline clip is active — the shared source for
+        // both the inline live FallbackBlend and the blob-backed DefaultBlendGroupFallback reset target.
+        public FallbackBlend BuildFallbackBlend()
         {
-            builder.AddComponent(new BlendGroupTimer { FallbackAccumulatedTime = 0f });
-
-            var activeFallback = new FallbackBlend
+            return new FallbackBlend
             {
                 ClipHash = _fallbackClipHash,
                 BlendInSpeed = _blendInSpeed,
@@ -88,23 +87,20 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 RemoveStartOffset = _removeStartOffset,
                 ApplyFootIK = _applyFootIK
             };
+        }
 
-            builder.AddComponent(activeFallback);
+        public void ApplyTo<T>(ref T builder)
+            where T : struct, IEntityCommands
+        {
+            builder.AddComponent(new BlendGroupTimer { FallbackAccumulatedTime = 0f });
 
-            builder.AddComponent(new DefaultBlendGroupFallback
-            {
-                ClipHash = _fallbackClipHash,
-                BlendInSpeed = _blendInSpeed,
-                BlendOutSpeed = _blendOutSpeed,
-                PlaybackMode = _playbackMode,
-                LayerIndex = 0,
-                BlendMode = AnimationBlendingMode.Override,
-                AvatarMaskHash = default,
-                PositionOffset = _positionOffset,
-                RotationOffset = _rotationOffset,
-                RemoveStartOffset = _removeStartOffset,
-                ApplyFootIK = _applyFootIK
-            });
+            // Live state, inline (mutated every frame by the latch/restore system).
+            builder.AddComponent(this.BuildFallbackBlend());
+
+            // DefaultBlendGroupFallback is the immutable reset target and is now blob-backed for
+            // cross-actor dedup; it requires Baker.AddBlobAsset, which this generic IEntityCommands
+            // abstraction does not expose, so the owning baker adds it after ApplyTo (see
+            // TimelineAnimationStateAuthoring) using BuildFallbackBlend() as the shared source.
 
             if (_fallbackBlob.IsCreated)
             {

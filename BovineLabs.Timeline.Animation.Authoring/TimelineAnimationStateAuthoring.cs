@@ -2,6 +2,7 @@ using BovineLabs.Core.Authoring.EntityCommands;
 using BovineLabs.Timeline.Animation.Data.Builders;
 using Rukhanka;
 using Rukhanka.Hybrid;
+using Unity.Collections;
 using Unity.Entities;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
@@ -58,6 +59,16 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 }
 
                 builder.ApplyTo(ref commands);
+
+                // DefaultBlendGroupFallback is the immutable reset target — blob-backed so actors
+                // with an identical default fallback dedupe to one blob (AddBlobAsset content hash).
+                var defaultFallback = builder.BuildFallbackBlend();
+                var blobBuilder = new BlobBuilder(Allocator.Temp);
+                blobBuilder.ConstructRoot<FallbackBlend>() = defaultFallback;
+                var fallbackRef = blobBuilder.CreateBlobAssetReference<FallbackBlend>(Allocator.Persistent);
+                blobBuilder.Dispose();
+                commands.AddBlobAsset(ref fallbackRef, out _);
+                commands.AddComponent(new DefaultBlendGroupFallback { Value = fallbackRef });
             }
 
             private (Hash128 hash, BlobAssetReference<AnimationClipBlob> blob) BakeFallbackAnimation(

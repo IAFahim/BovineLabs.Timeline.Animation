@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using BovineLabs.Testing;
 using BovineLabs.Timeline.Data;
 using NUnit.Framework;
 using Rukhanka;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Hash128 = Unity.Entities.Hash128;
@@ -12,6 +14,27 @@ namespace BovineLabs.Timeline.Animation.Tests
     {
         private static readonly Hash128 DefaultClip = new Hash128(1u, 2u, 3u, 4u);
         private static readonly Hash128 OverrideClip = new Hash128(5u, 6u, 7u, 8u);
+
+        private readonly List<BlobAssetReference<FallbackBlend>> fallbackBlobs = new();
+
+        [TearDown]
+        public void DisposeFallbackBlobs()
+        {
+            foreach (var blob in this.fallbackBlobs)
+                if (blob.IsCreated)
+                    blob.Dispose();
+            this.fallbackBlobs.Clear();
+        }
+
+        private BlobAssetReference<FallbackBlend> DefaultBlob(FallbackBlend value)
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            builder.ConstructRoot<FallbackBlend>() = value;
+            var blob = builder.CreateBlobAssetReference<FallbackBlend>(Allocator.Persistent);
+            builder.Dispose();
+            this.fallbackBlobs.Add(blob);
+            return blob;
+        }
 
         [Test]
         public void LatchesTrackOverride_WhileClipActive()
@@ -102,16 +125,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 RotationOffset = quaternion.identity,
             };
             Manager.AddComponentData(actor, fallback);
-            Manager.AddComponentData(actor, new DefaultBlendGroupFallback
-            {
-                ClipHash = fallback.ClipHash,
-                BlendInSpeed = fallback.BlendInSpeed,
-                BlendOutSpeed = fallback.BlendOutSpeed,
-                PlaybackMode = fallback.PlaybackMode,
-                LayerIndex = fallback.LayerIndex,
-                BlendMode = fallback.BlendMode,
-                RotationOffset = quaternion.identity,
-            });
+            Manager.AddComponentData(actor, new DefaultBlendGroupFallback { Value = this.DefaultBlob(fallback) });
             return actor;
         }
 

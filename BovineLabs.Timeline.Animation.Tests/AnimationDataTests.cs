@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using NUnit.Framework;
 using Rukhanka;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Hash128 = Unity.Entities.Hash128;
@@ -256,6 +258,27 @@ namespace BovineLabs.Timeline.Animation.Tests
     [TestFixture]
     public class DefaultBlendGroupFallbackTests
     {
+        private readonly List<BlobAssetReference<FallbackBlend>> blobs = new();
+
+        [TearDown]
+        public void DisposeBlobs()
+        {
+            foreach (var blob in this.blobs)
+                if (blob.IsCreated)
+                    blob.Dispose();
+            this.blobs.Clear();
+        }
+
+        private BlobAssetReference<FallbackBlend> Blob(FallbackBlend value)
+        {
+            var builder = new BlobBuilder(Allocator.Temp);
+            builder.ConstructRoot<FallbackBlend>() = value;
+            var blob = builder.CreateBlobAssetReference<FallbackBlend>(Allocator.Persistent);
+            builder.Dispose();
+            this.blobs.Add(blob);
+            return blob;
+        }
+
         [Test]
         public void IsValueType()
         {
@@ -269,30 +292,20 @@ namespace BovineLabs.Timeline.Animation.Tests
         }
 
         [Test]
-        public void Default_ZeroFields()
+        public void Default_HasNoBlob()
         {
             var d = new DefaultBlendGroupFallback();
-            Assert.AreEqual(default(Hash128), d.ClipHash);
-            Assert.AreEqual(0f, d.BlendInSpeed);
-            Assert.AreEqual(0f, d.BlendOutSpeed);
-            Assert.AreEqual(FallbackPlaybackMode.Loop, d.PlaybackMode);
-            Assert.AreEqual(0, d.LayerIndex);
-            Assert.AreEqual(default(AnimationBlendingMode), d.BlendMode);
-            Assert.AreEqual(default(Hash128), d.AvatarMaskHash);
-            Assert.AreEqual(float3.zero, d.PositionOffset);
-            Assert.AreEqual(default(quaternion), d.RotationOffset);
-            Assert.IsFalse(d.RemoveStartOffset);
-            Assert.IsFalse(d.ApplyFootIK);
+            Assert.IsFalse(d.Value.IsCreated);
         }
 
         [Test]
-        public void Fields_SetCorrectly()
+        public void BlobPayload_RoundTrips()
         {
             var hash = new Hash128(7u, 8u, 9u, 10u);
             var maskHash = new Hash128(11u, 12u, 13u, 14u);
             var posOff = new float3(3f, 4f, 5f);
             var rotOff = quaternion.Euler(0f, math.radians(45f), 0f);
-            var d = new DefaultBlendGroupFallback
+            var fallback = new FallbackBlend
             {
                 ClipHash = hash,
                 BlendInSpeed = 3.0f,
@@ -306,17 +319,21 @@ namespace BovineLabs.Timeline.Animation.Tests
                 RemoveStartOffset = true,
                 ApplyFootIK = true
             };
-            Assert.AreEqual(hash, d.ClipHash);
-            Assert.AreEqual(3.0f, d.BlendInSpeed);
-            Assert.AreEqual(2.0f, d.BlendOutSpeed);
-            Assert.AreEqual(FallbackPlaybackMode.Hold, d.PlaybackMode);
-            Assert.AreEqual(2, d.LayerIndex);
-            Assert.AreEqual(AnimationBlendingMode.Override, d.BlendMode);
-            Assert.AreEqual(maskHash, d.AvatarMaskHash);
-            Assert.AreEqual(posOff, d.PositionOffset);
-            Assert.AreEqual(rotOff, d.RotationOffset);
-            Assert.IsTrue(d.RemoveStartOffset);
-            Assert.IsTrue(d.ApplyFootIK);
+            var d = new DefaultBlendGroupFallback { Value = this.Blob(fallback) };
+
+            Assert.IsTrue(d.Value.IsCreated);
+            ref var v = ref d.Value.Value;
+            Assert.AreEqual(hash, v.ClipHash);
+            Assert.AreEqual(3.0f, v.BlendInSpeed);
+            Assert.AreEqual(2.0f, v.BlendOutSpeed);
+            Assert.AreEqual(FallbackPlaybackMode.Hold, v.PlaybackMode);
+            Assert.AreEqual(2, v.LayerIndex);
+            Assert.AreEqual(AnimationBlendingMode.Override, v.BlendMode);
+            Assert.AreEqual(maskHash, v.AvatarMaskHash);
+            Assert.AreEqual(posOff, v.PositionOffset);
+            Assert.AreEqual(rotOff, v.RotationOffset);
+            Assert.IsTrue(v.RemoveStartOffset);
+            Assert.IsTrue(v.ApplyFootIK);
         }
     }
 

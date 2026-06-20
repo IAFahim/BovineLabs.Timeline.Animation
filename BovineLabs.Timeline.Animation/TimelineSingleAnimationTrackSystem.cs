@@ -20,8 +20,8 @@ namespace BovineLabs.Timeline.Animation
     {
         private const float MinDuration = 0.001f;
 
-        private NativeParallelMultiHashMap<Entity, BlendGroupEntry> activeAnimationsMap;
-        private NativeList<Entity> uniqueKeys;
+        private NativeParallelMultiHashMap<Entity, BlendGroupEntry> _activeAnimationsMap;
+        private NativeList<Entity> _uniqueKeys;
         private EntityQuery _query;
 
         private UnsafeComponentLookup<ClipWeight> _clipWeights;
@@ -31,8 +31,8 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
-            activeAnimationsMap = new NativeParallelMultiHashMap<Entity, BlendGroupEntry>(64, Allocator.Persistent);
-            uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
+            _activeAnimationsMap = new NativeParallelMultiHashMap<Entity, BlendGroupEntry>(64, Allocator.Persistent);
+            _uniqueKeys = new NativeList<Entity>(64, Allocator.Persistent);
             _query = SystemAPI.QueryBuilder().WithAll<ClipActive, TimelineActive, RukhankaSingleClipData>().Build();
             _clipWeights = state.GetUnsafeComponentLookup<ClipWeight>(true);
             _trackData = state.GetUnsafeComponentLookup<RukhankaSingleTrackData>(true);
@@ -43,17 +43,17 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
-            if (activeAnimationsMap.IsCreated) activeAnimationsMap.Dispose();
-            if (uniqueKeys.IsCreated) uniqueKeys.Dispose();
+            if (_activeAnimationsMap.IsCreated) _activeAnimationsMap.Dispose();
+            if (_uniqueKeys.IsCreated) _uniqueKeys.Dispose();
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var count = _query.CalculateEntityCountWithoutFiltering();
-            if (activeAnimationsMap.Capacity < count)
-                activeAnimationsMap.Capacity = math.max(activeAnimationsMap.Capacity * 2, count);
-            activeAnimationsMap.Clear();
+            if (_activeAnimationsMap.Capacity < count)
+                _activeAnimationsMap.Capacity = math.max(_activeAnimationsMap.Capacity * 2, count);
+            _activeAnimationsMap.Clear();
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
 
             _clipWeights.Update(ref state);
@@ -65,23 +65,23 @@ namespace BovineLabs.Timeline.Animation
                 AnimDB = blobDB.animations,
                 ClipWeights = _clipWeights,
                 TrackDataLookup = _trackData,
-                ActiveAnimations = activeAnimationsMap.AsParallelWriter()
+                ActiveAnimations = _activeAnimationsMap.AsParallelWriter()
             };
 
             state.Dependency = gatherJob.ScheduleParallel(state.Dependency);
 
             state.Dependency = new ExtractKeysJob
             {
-                ActiveAnimations = activeAnimationsMap,
-                UniqueKeys = uniqueKeys
+                ActiveAnimations = _activeAnimationsMap,
+                UniqueKeys = _uniqueKeys
             }.Schedule(state.Dependency);
 
             state.Dependency = new ApplyAnimationsJob
             {
-                UniqueKeys = uniqueKeys.AsDeferredJobArray(),
-                ActiveAnimations = activeAnimationsMap,
+                UniqueKeys = _uniqueKeys.AsDeferredJobArray(),
+                ActiveAnimations = _activeAnimationsMap,
                 AnimationBuffers = _animationBuffers
-            }.Schedule(uniqueKeys, 64, state.Dependency);
+            }.Schedule(_uniqueKeys, 64, state.Dependency);
         }
 
         [BurstCompile]
