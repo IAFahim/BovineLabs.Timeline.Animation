@@ -137,7 +137,8 @@ namespace BovineLabs.Timeline.Animation
                 BlendGroupLookup = _blendGroup,
                 PlaybackStateLookup = _playbackState,
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
-                IsScrubbing = isScrubbing
+                IsScrubbing = isScrubbing,
+                Logger = SystemAPI.GetSingleton<BovineLabs.Core.BLLogger>()
             }.Schedule(_targetEntities, 64, state.Dependency);
         }
 
@@ -269,6 +270,10 @@ namespace BovineLabs.Timeline.Animation
 
             public float GlobalDeltaTime;
             public bool IsScrubbing;
+
+            // Burst-safe logger (BLLogger). UnityEngine.Debug.Log cannot be Burst-compiled, so missing-data
+            // warnings inside this job must go through BLLogger, which routes via Unity.Logging.
+            public BovineLabs.Core.BLLogger Logger;
 
             public unsafe void Execute(int index)
             {
@@ -457,11 +462,9 @@ namespace BovineLabs.Timeline.Animation
                 {
                     var motionData = motions[i];
                     var found = AnimDB.TryGetValue(motionData.AnimationHash, out var cb);
-#if UNITY_EDITOR
                     if (!found)
-                        Debug.LogWarning(
+                        this.Logger.LogWarning512(
                             "[BlendTree2D] Animation hash not found in BlobDatabaseSingleton. Motion entry will be skipped.");
-#endif
                     blendTreeClips[i] = found ? cb : BlobAssetReference<AnimationClipBlob>.Null;
                     blendTreePositions[i] = motionData.BlendTree2DMotionElement;
                 }
