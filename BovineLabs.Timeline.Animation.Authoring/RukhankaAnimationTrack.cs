@@ -90,48 +90,19 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
             var baker = context.Baker;
             var trackEntity = context.TrackEntity;
-            Hash128 avatarMaskHash = default;
 
-            if (applyAvatarMask && avatarMask != null)
-            {
-                var maskBaker = new AvatarMaskBaker();
-                var maskBlob = maskBaker.CreateAvatarMaskBlob(baker, avatarMask, rigDef);
-                avatarMaskHash = maskBlob.Value.hash;
-                var maskData = new AvatarMaskBakingData
-                {
-                    rigEntity = baker.GetEntity(rigDef, TransformUsageFlags.Dynamic),
-                    dataBlob = maskBlob
-                };
-
-                baker.AddBuffer<AvatarMaskBakingData>(trackEntity).Add(maskData);
-            }
+            var avatarMaskHash = BakeAvatarMask(baker, trackEntity, rigDef);
 
             baker.AddComponent(trackEntity, new RukhankaSingleTrackData
             {
                 LayerIndex = LayerIndex,
-                TrackPositionOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero,
-                TrackRotationOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? Quaternion.Euler(eulerAnglesOffset) : Quaternion.identity,
+                TrackPositionOffset = OffsetPosition,
+                TrackRotationOffset = OffsetRotation,
                 ApplyAvatarMask = applyAvatarMask,
                 AvatarMaskHash = avatarMaskHash
             });
 
-            if (ExitIdleClip != null && ExitIdleClip.TryComputeHash(rigDef.GetAvatar(), out var exitIdleHash))
-            {
-                baker.AddComponent(trackEntity, new TrackFallbackOverride
-                {
-                    FallbackClipHash = exitIdleHash,
-                    BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
-                    BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
-                    PlaybackMode = FallbackPlaybackMode,
-                    LayerIndex = LayerIndex,
-                    BlendMode = AnimationBlendingMode.Override,
-                    AvatarMaskHash = avatarMaskHash,
-                    PositionOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero,
-                    RotationOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? Quaternion.Euler(eulerAnglesOffset) : Quaternion.identity,
-                    RemoveStartOffset = true,
-                    ApplyFootIK = true
-                });
-            }
+            BakeFallbackOverride(baker, trackEntity, rigDef, avatarMaskHash);
 
             var clipComponents = GetClips()
                 .Select(c => c.asset as RukhankaAnimationClip)
@@ -177,6 +148,55 @@ namespace BovineLabs.Timeline.Animation.Authoring
             }
 
             base.Bake(context);
+        }
+
+        private Vector3 OffsetPosition =>
+            trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero;
+
+        private Quaternion OffsetRotation =>
+            trackOffset == TrackOffset.ApplyTransformOffsets ? Quaternion.Euler(eulerAnglesOffset) : Quaternion.identity;
+
+        private Hash128 BakeAvatarMask(IBaker baker, Entity trackEntity, RigDefinitionAuthoring rigDef)
+        {
+            if (!applyAvatarMask || avatarMask == null)
+            {
+                return default;
+            }
+
+            var maskBaker = new AvatarMaskBaker();
+            var maskBlob = maskBaker.CreateAvatarMaskBlob(baker, avatarMask, rigDef);
+            var maskData = new AvatarMaskBakingData
+            {
+                rigEntity = baker.GetEntity(rigDef, TransformUsageFlags.Dynamic),
+                dataBlob = maskBlob
+            };
+
+            baker.AddBuffer<AvatarMaskBakingData>(trackEntity).Add(maskData);
+
+            return maskBlob.Value.hash;
+        }
+
+        private void BakeFallbackOverride(IBaker baker, Entity trackEntity, RigDefinitionAuthoring rigDef, Hash128 avatarMaskHash)
+        {
+            if (ExitIdleClip == null || !ExitIdleClip.TryComputeHash(rigDef.GetAvatar(), out var exitIdleHash))
+            {
+                return;
+            }
+
+            baker.AddComponent(trackEntity, new TrackFallbackOverride
+            {
+                FallbackClipHash = exitIdleHash,
+                BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
+                BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
+                PlaybackMode = FallbackPlaybackMode,
+                LayerIndex = LayerIndex,
+                BlendMode = AnimationBlendingMode.Override,
+                AvatarMaskHash = avatarMaskHash,
+                PositionOffset = OffsetPosition,
+                RotationOffset = OffsetRotation,
+                RemoveStartOffset = true,
+                ApplyFootIK = true
+            });
         }
     }
 }

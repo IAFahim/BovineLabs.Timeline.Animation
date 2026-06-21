@@ -1,10 +1,13 @@
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline.Data;
+using Rukhanka;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Mathematics;
+using Hash128 = Unity.Entities.Hash128;
 
 namespace BovineLabs.Timeline.Animation
 {
@@ -170,32 +173,41 @@ namespace BovineLabs.Timeline.Animation
         {
             public static bool Matches(in FallbackBlend f, in TrackFallbackOverride o)
             {
-                return f.ClipHash == o.FallbackClipHash
-                    && f.BlendInSpeed == o.BlendInSpeed
-                    && f.BlendOutSpeed == o.BlendOutSpeed
-                    && f.PlaybackMode == o.PlaybackMode
-                    && f.LayerIndex == o.LayerIndex
-                    && f.BlendMode == o.BlendMode
-                    && f.AvatarMaskHash == o.AvatarMaskHash
-                    && f.PositionOffset.Equals(o.PositionOffset)
-                    && f.RotationOffset.Equals(o.RotationOffset)
-                    && f.RemoveStartOffset == o.RemoveStartOffset
-                    && f.ApplyFootIK == o.ApplyFootIK;
+                // Both halves carry the same blend payload; the hash field is the only naming difference.
+                return MatchesBlend(
+                    in f, o.FallbackClipHash, o.BlendInSpeed, o.BlendOutSpeed, o.PlaybackMode, o.LayerIndex,
+                    o.BlendMode, o.AvatarMaskHash, o.PositionOffset, o.RotationOffset, o.RemoveStartOffset,
+                    o.ApplyFootIK);
             }
 
             public static bool Matches(in FallbackBlend f, in FallbackBlend d)
             {
-                return f.ClipHash == d.ClipHash
-                    && f.BlendInSpeed == d.BlendInSpeed
-                    && f.BlendOutSpeed == d.BlendOutSpeed
-                    && f.PlaybackMode == d.PlaybackMode
-                    && f.LayerIndex == d.LayerIndex
-                    && f.BlendMode == d.BlendMode
-                    && f.AvatarMaskHash == d.AvatarMaskHash
-                    && f.PositionOffset.Equals(d.PositionOffset)
-                    && f.RotationOffset.Equals(d.RotationOffset)
-                    && f.RemoveStartOffset == d.RemoveStartOffset
-                    && f.ApplyFootIK == d.ApplyFootIK;
+                return MatchesBlend(
+                    in f, d.ClipHash, d.BlendInSpeed, d.BlendOutSpeed, d.PlaybackMode, d.LayerIndex,
+                    d.BlendMode, d.AvatarMaskHash, d.PositionOffset, d.RotationOffset, d.RemoveStartOffset,
+                    d.ApplyFootIK);
+            }
+
+            // Single comparison spine shared by both overloads. The blend payload is identical between
+            // FallbackBlend and TrackFallbackOverride, so the caller unpacks the fields and this compares
+            // them against the FallbackBlend in one place.
+            private static bool MatchesBlend(
+                in FallbackBlend f, Hash128 clipHash, float blendInSpeed, float blendOutSpeed,
+                FallbackPlaybackMode playbackMode, int layerIndex, AnimationBlendingMode blendMode,
+                Hash128 avatarMaskHash, float3 positionOffset, quaternion rotationOffset,
+                bool removeStartOffset, bool applyFootIK)
+            {
+                return f.ClipHash == clipHash
+                    && f.BlendInSpeed == blendInSpeed
+                    && f.BlendOutSpeed == blendOutSpeed
+                    && f.PlaybackMode == playbackMode
+                    && f.LayerIndex == layerIndex
+                    && f.BlendMode == blendMode
+                    && f.AvatarMaskHash == avatarMaskHash
+                    && f.PositionOffset.Equals(positionOffset)
+                    && f.RotationOffset.Equals(rotationOffset)
+                    && f.RemoveStartOffset == removeStartOffset
+                    && f.ApplyFootIK == applyFootIK;
             }
         }
     }

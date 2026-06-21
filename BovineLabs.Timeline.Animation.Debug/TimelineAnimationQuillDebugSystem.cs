@@ -2,6 +2,7 @@
 using System;
 using BovineLabs.Core.ConfigVars;
 using BovineLabs.Quill;
+using BovineLabs.Timeline.Core.Debug;
 using BovineLabs.Timeline.Data;
 using Rukhanka;
 using Unity.Burst;
@@ -95,11 +96,13 @@ namespace BovineLabs.Timeline.Animation.Debug
             if (!TimelineAnimationDebugConfig.Enabled.Data)
                 return;
 
-            var drawer = SystemAPI.GetSingleton<DrawSystem.Singleton>()
-                .CreateDrawer<TimelineAnimationQuillDebugSystem>(Category);
+            var drawSystem = SystemAPI.GetSingleton<DrawSystem.Singleton>();
+            var drawer = drawSystem.CreateDrawer<TimelineAnimationQuillDebugSystem>(Category);
 
             if (!drawer.IsEnabled)
                 return;
+
+            var hasViewer = TimelineDebugTier.TryGetViewer(drawSystem.CameraCulling, out var viewer);
 
             var ltwLookup = SystemAPI.GetComponentLookup<LocalToWorld>(true);
             var clipLookup = SystemAPI.GetComponentLookup<Clip>(true);
@@ -110,6 +113,8 @@ namespace BovineLabs.Timeline.Animation.Debug
             state.Dependency = new DrawTargetBlendStateJob
             {
                 Drawer = drawer,
+                Viewer = viewer,
+                HasViewer = hasViewer,
                 DrawWeightBars = TimelineAnimationDebugConfig.DrawWeightBars.Data,
                 DrawFallback = TimelineAnimationDebugConfig.DrawFallback.Data,
                 DrawSummary = TimelineAnimationDebugConfig.DrawSummary.Data,
@@ -120,6 +125,8 @@ namespace BovineLabs.Timeline.Animation.Debug
                 state.Dependency = new DrawBlendTreeClipJob
                 {
                     Drawer = drawer,
+                    Viewer = viewer,
+                    HasViewer = hasViewer,
                     LocalToWorldLookup = ltwLookup,
                     ClipLookup = clipLookup,
                     ClipWeightLookup = clipWeightLookup,
@@ -134,6 +141,8 @@ namespace BovineLabs.Timeline.Animation.Debug
         private partial struct DrawTargetBlendStateJob : IJobEntity
         {
             public Drawer Drawer;
+            public float3 Viewer;
+            public bool HasViewer;
             public bool DrawWeightBars;
             public bool DrawFallback;
             public bool DrawSummary;
@@ -151,38 +160,49 @@ namespace BovineLabs.Timeline.Animation.Debug
                 var root = localToWorld.Position;
                 var header = root + new float3(0f, 2.15f, 0f);
 
-                // Surface the AnimationDebugState summary (computed by AnimationDebugSystem) when present.
-                if (DrawSummary && DebugStateLookup.TryGetComponent(entity, out var dbg))
-                {
-                    var summary = default(FixedString128Bytes);
-                    summary.Append("trk:");
-                    summary.Append(dbg.ActiveTrackCount);
-                    summary.Append(" clp:");
-                    summary.Append(dbg.ActiveClipCount);
-                    summary.Append(" fbw:");
-                    summary.Append(dbg.FallbackWeight);
-                    summary.Append(" fad:");
-                    summary.Append(dbg.FallbackTrackCount);
-                    Drawer.Text128(header + new float3(0f, 0.2f, 0f), summary, TextColor(), 10f);
-                }
+                var tier = TimelineDebugTier.Resolve(root, Viewer, HasViewer);
 
-                var label = default(FixedString128Bytes);
-                label.Append("Anim ");
-                label.Append("sm:");
-                label.Append(smoothEntries.Length);
-                label.Append(" out:");
-                label.Append(animationsToProcess.Length);
-                label.Append(" fb:");
-                label.Append((int)fallback.PlaybackMode);
-
-                Drawer.Text128(header, label, TextColor(), 12f);
+                // Far: the animation-state ring — what this entity is doing. No text.
                 Drawer.Circle(root + new float3(0f, 0.08f, 0f), new float3(0f, 0.35f, 0f), RingColor());
 
-                if (DrawWeightBars)
-                    DrawWeightBarsFn(root + new float3(-0.75f, 1.65f, 0f), smoothEntries);
+                if (tier >= DebugTier.Mid)
+                {
+                    // Mid: the fallback direction + one short label.
+                    if (DrawFallback && math.lengthsq(fallback.PositionOffset) > 0.0001f)
+                        Drawer.Arrow(root + new float3(0f, 1.05f, 0f), fallback.PositionOffset, FallbackColor());
 
-                if (DrawFallback && math.lengthsq(fallback.PositionOffset) > 0.0001f)
-                    Drawer.Arrow(root + new float3(0f, 1.05f, 0f), fallback.PositionOffset, FallbackColor());
+                    Drawer.Text32(header, "Anim", TextColor(), 12f);
+                }
+
+                if (tier == DebugTier.Close)
+                {
+                    // Close: every number — full label, weight bars, and the debug-state summary.
+                    var label = default(FixedString128Bytes);
+                    label.Append((FixedString32Bytes)"Anim sm:");
+                    label.Append(smoothEntries.Length);
+                    label.Append((FixedString32Bytes)" out:");
+                    label.Append(animationsToProcess.Length);
+                    label.Append((FixedString32Bytes)" fb:");
+                    label.Append((int)fallback.PlaybackMode);
+                    Drawer.Text128(header, label, TextColor(), 12f);
+
+                    if (DrawSummary && DebugStateLookup.TryGetComponent(entity, out var dbg))
+                    {
+                        var summary = default(FixedString128Bytes);
+                        summary.Append((FixedString32Bytes)"trk:");
+                        summary.Append(dbg.ActiveTrackCount);
+                        summary.Append((FixedString32Bytes)" clp:");
+                        summary.Append(dbg.ActiveClipCount);
+                        summary.Append((FixedString32Bytes)" fbw:");
+                        summary.Append(dbg.FallbackWeight);
+                        summary.Append((FixedString32Bytes)" fad:");
+                        summary.Append(dbg.FallbackTrackCount);
+                        Drawer.Text128(header + new float3(0f, 0.2f, 0f), summary, TextColor(), 10f);
+                    }
+
+                    if (DrawWeightBars)
+                        DrawWeightBarsFn(root + new float3(-0.75f, 1.65f, 0f), smoothEntries);
+                }
             }
 
             private void DrawWeightBarsFn(float3 origin, DynamicBuffer<SmoothBlendGroupEntry> smoothEntries)
@@ -215,6 +235,8 @@ namespace BovineLabs.Timeline.Animation.Debug
         private partial struct DrawBlendTreeClipJob : IJobEntity
         {
             public Drawer Drawer;
+            public float3 Viewer;
+            public bool HasViewer;
 
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public ComponentLookup<Clip> ClipLookup;
@@ -241,37 +263,53 @@ namespace BovineLabs.Timeline.Animation.Debug
                 var flatDir = new float3(directionClip.Value.x, 0f, directionClip.Value.y);
                 var color = BlendTreeColor();
 
+                var tier = TimelineDebugTier.Resolve(targetLtw.Position, Viewer, HasViewer);
+
+                // Far: the blend direction — what this clip is steering. No text.
                 if (math.lengthsq(flatDir) > 0.0001f)
                     Drawer.Arrow(origin, math.normalize(flatDir) * (0.75f * math.saturate(weight)), color);
                 else
                     Drawer.Circle(origin, new float3(0f, 0.1f, 0f), color);
 
-                if (math.lengthsq(directionClip.PositionOffset) > 0.0001f)
-                    Drawer.Arrow(origin + new float3(0f, 0.2f, 0f), directionClip.PositionOffset * 0.35f,
-                        OffsetColor());
-
-                if (DrawClipLabels)
+                if (tier >= DebugTier.Mid)
                 {
+                    // Mid: the offset arrow + one short label.
+                    if (math.lengthsq(directionClip.PositionOffset) > 0.0001f)
+                        Drawer.Arrow(origin + new float3(0f, 0.2f, 0f), directionClip.PositionOffset * 0.35f,
+                            OffsetColor());
+
+                    if (DrawClipLabels)
+                    {
+                        var shortLabel = default(FixedString32Bytes);
+                        shortLabel.Append((FixedString32Bytes)"BT2D ");
+                        shortLabel.Append(ReadKindName(directionClip.ReadKind));
+                        Drawer.Text32(origin + new float3(0f, 0.2f, 0f), shortLabel, color, 12f);
+                    }
+                }
+
+                if (tier == DebugTier.Close && DrawClipLabels)
+                {
+                    // Close: every number — weight, time, layer, and the motion-point map.
                     var label = default(FixedString128Bytes);
-                    label.Append("BT2D ");
+                    label.Append((FixedString32Bytes)"BT2D ");
                     label.Append(ReadKindName(directionClip.ReadKind));
-                    label.Append(" w:");
+                    label.Append((FixedString32Bytes)" w:");
                     label.Append((int)math.round(math.saturate(weight) * 100f));
-                    label.Append("% t:");
+                    label.Append((FixedString32Bytes)"% t:");
                     label.Append((int)math.round((float)localTime.Value * 100f));
-                    label.Append("%");
+                    label.Append((FixedString32Bytes)"%");
 
                     if (ClipLookup.TryGetComponent(clipEntity, out var clip) &&
                         TrackDataLookup.TryGetComponent(clip.Track, out var trackData))
                     {
-                        label.Append(" L:");
+                        label.Append((FixedString32Bytes)" L:");
                         label.Append(trackData.LayerIndex);
 
                         if (DrawMotions && MotionLookup.TryGetBuffer(clip.Track, out var motions))
                             DrawMotionMap(origin + new float3(0f, 0.35f, 0f), directionClip.Value, motions);
                     }
 
-                    Drawer.Text128(origin + new float3(0f, 0.2f, 0f), label, color, 12f);
+                    Drawer.Text128(origin + new float3(0f, 0.5f, 0f), label, color, 12f);
                 }
             }
 

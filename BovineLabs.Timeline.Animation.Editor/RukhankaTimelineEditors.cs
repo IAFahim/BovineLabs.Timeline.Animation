@@ -79,9 +79,7 @@ namespace BovineLabs.Timeline.Animation.Editor
                 return false;
             }
 
-            var changed = false;
             var animationClip = asset.animationClipHolder;
-            var duration = Math.Max(MinDuration, animationClip.length);
             var owner = track != null ? track : clip.GetParentTrack();
 
             if (recordUndo && owner != null)
@@ -89,22 +87,33 @@ namespace BovineLabs.Timeline.Animation.Editor
                 Undo.RegisterCompleteObjectUndo(owner, UndoName);
             }
 
+            var changed = ApplyClipFields(clip, animationClip, resetPlayback);
+
+            if (changed && owner != null)
+            {
+                EditorUtility.SetDirty(owner);
+            }
+
+            return changed;
+        }
+
+        // Syncs the clip's fields to its source animation; returns true if any field actually changed.
+        // Each sync is "only write when the value differs" so we don't dirty the clip needlessly.
+        private static bool ApplyClipFields(TimelineClip clip, AnimationClip animationClip, bool resetPlayback)
+        {
+            var duration = Math.Max(MinDuration, animationClip.length);
+
+            var changed = false;
+
             if (!Approximately(clip.duration, duration))
             {
                 clip.duration = duration;
                 changed = true;
             }
 
-            if (resetPlayback && !Approximately(clip.timeScale, 1d))
+            if (resetPlayback)
             {
-                clip.timeScale = 1d;
-                changed = true;
-            }
-
-            if (resetPlayback && !Approximately(clip.clipIn, 0d))
-            {
-                clip.clipIn = 0d;
-                changed = true;
+                changed |= ResetPlayback(clip);
             }
 
             if (clip.displayName != animationClip.name)
@@ -113,9 +122,24 @@ namespace BovineLabs.Timeline.Animation.Editor
                 changed = true;
             }
 
-            if (changed && owner != null)
+            return changed;
+        }
+
+        // Restores neutral playback (1x speed, no clip-in trim); returns whether either field changed.
+        private static bool ResetPlayback(TimelineClip clip)
+        {
+            var changed = false;
+
+            if (!Approximately(clip.timeScale, 1d))
             {
-                EditorUtility.SetDirty(owner);
+                clip.timeScale = 1d;
+                changed = true;
+            }
+
+            if (!Approximately(clip.clipIn, 0d))
+            {
+                clip.clipIn = 0d;
+                changed = true;
             }
 
             return changed;
