@@ -114,7 +114,7 @@ namespace BovineLabs.Timeline.Animation
                 float normalizedTime;
                 if (extrapolation == TimelineClip.ClipExtrapolation.PingPong)
                 {
-                    var t = math.fmod(timeInSeconds, duration * 2f);
+                    var t = math.fmod(math.abs(timeInSeconds), duration * 2f);
                     normalizedTime = (duration - math.abs(t - duration)) / duration;
                 }
                 else if (extrapolation == TimelineClip.ClipExtrapolation.Loop || clipBlob.Value.looped)

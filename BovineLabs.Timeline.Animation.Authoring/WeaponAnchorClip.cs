@@ -32,6 +32,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 ? context.Baker.GetEntity(resolved, TransformUsageFlags.Dynamic)
                 : Entity.Null;
 
+            if (resolved != null && boneEntity == Entity.Null)
+                Debug.LogError(
+                    $"{nameof(WeaponAnchorClip)} '{name}' resolved bone '{resolved.name}' but it is not part of the bake (outside the SubScene?); the clip will not anchor anything.",
+                    this);
+
             context.Baker.AddComponent(clipEntity, new WeaponAnchorData
             {
                 Bone = boneEntity,

@@ -1,6 +1,5 @@
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
-using BovineLabs.Core.Jobs;
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
@@ -9,6 +8,7 @@ using Rukhanka;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Jobs;
 using Unity.Mathematics;
 using Unity.Transforms;
 
@@ -78,11 +78,15 @@ namespace BovineLabs.Timeline.Animation
 
             var blendData = _blendImpl.Update(ref state);
 
+            // RelaxJob and WriteLookAtJob both read-modify-write AimIKLookup (and WriteLookAtJob also
+            // LocalTransformLookup) through NativeDisableParallelForRestriction lookups. Two source entities can
+            // legitimately resolve to the same AimIKEntity/TargetEntity, which would be a silent parallel-write
+            // data race. Run both single-threaded so colliding keys are resolved deterministically.
             state.Dependency = new RelaxJob
             {
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 AimIKLookup = _aimIKLookup
-            }.ScheduleParallel(state.Dependency);
+            }.Schedule(state.Dependency);
 
             state.Dependency = new WriteLookAtJob
             {
@@ -92,7 +96,7 @@ namespace BovineLabs.Timeline.Animation
                 ParentLookup = _parentLookup,
                 LtwLookup = _ltwLookup,
                 AimIKLookup = _aimIKLookup
-            }.ScheduleParallel(blendData, 64, state.Dependency);
+            }.Schedule(state.Dependency);
         }
 
         [BurstCompile]
@@ -159,28 +163,43 @@ namespace BovineLabs.Timeline.Animation
         }
 
         [BurstCompile]
-        private struct WriteLookAtJob : IJobParallelHashMapDefer
+        private struct WriteLookAtJob : IJob
         {
             [ReadOnly] public NativeParallelHashMap<Entity, MixData<CharacterLookAtData>>.ReadOnly BlendData;
             [ReadOnly] public ComponentLookup<CharacterLookAtTarget> LookAtTargetLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
 
-            [NativeDisableParallelForRestriction] public ComponentLookup<LocalTransform> LocalTransformLookup;
-            [NativeDisableParallelForRestriction] public ComponentLookup<AimIKComponent> AimIKLookup;
+            public ComponentLookup<LocalTransform> LocalTransformLookup;
+            public ComponentLookup<AimIKComponent> AimIKLookup;
 
-            public void ExecuteNext(int entryIndex, int jobIndex)
+            public void Execute()
             {
-                this.Read(BlendData, entryIndex, out var entity, out var mixData);
+                var enumerator = BlendData.GetEnumerator();
+                while (enumerator.MoveNext())
+                {
+                    var current = enumerator.Current;
+                    Apply(current.Key, current.Value);
+                }
+            }
 
+            private void Apply(Entity entity, MixData<CharacterLookAtData> mixData)
+            {
                 if (!LookAtTargetLookup.TryGetComponent(entity, out var lookAtTarget)) return;
+
+                // Capture the dominant clip's authored angle limits before blending. AccumulateWeighted always
+                // stores the highest-weight clip in Value1, so Value1.AngleLimits is the authored aim cone.
+                // JobHelpers.Blend would otherwise lerp AngleLimits toward the zero-pollution default's (0,0),
+                // collapsing the cone during fade in/out. Angle limits are a configuration cone, not a value to
+                // spatially interpolate toward the origin.
+                var angleLimits = mixData.Value1.AngleLimits;
 
                 var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref mixData, default);
 
                 if (math.any(math.isnan(blended.LookPoint))) return;
 
-                var minA = math.min(blended.AngleLimits.x, blended.AngleLimits.y);
-                var maxA = math.max(blended.AngleLimits.x, blended.AngleLimits.y);
+                var minA = math.min(angleLimits.x, angleLimits.y);
+                var maxA = math.max(angleLimits.x, angleLimits.y);
 
                 var targetEntity = lookAtTarget.TargetEntity;
                 if (targetEntity != Entity.Null && LocalTransformLookup.HasComponent(targetEntity))

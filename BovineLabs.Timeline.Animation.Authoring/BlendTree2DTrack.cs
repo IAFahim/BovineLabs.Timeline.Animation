@@ -71,7 +71,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var mixer = AnimationMixerPlayable.Create(graph, inputCount);
 
                 // Resolve the Animator from the binding (may be RigDefinitionAuthoring on same GO)
-                var director = go.GetComponent<PlayableDirector>();
+                var director = go != null ? go.GetComponent<PlayableDirector>() : null;
                 var rawBinding = director != null ? director.GetGenericBinding(this) : null;
                 var animator = rawBinding as Animator ?? (rawBinding as Component)?.GetComponent<Animator>();
                 if (animator != null)

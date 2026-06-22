@@ -50,12 +50,19 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     .WithFallback(default, authoring.blendInDuration, authoring.blendOutDuration,
                         authoring.fallbackPlaybackMode);
 
-                if (authoring.fallbackAnimationClip != null)
+                if (authoring.fallbackAnimationClip != null && avatar != null)
                 {
                     var (fallbackHash, fallbackBlob) = BakeFallbackAnimation(authoring, avatar, entity);
                     builder = builder.WithFallback(fallbackHash, authoring.blendInDuration, authoring.blendOutDuration,
                             authoring.fallbackPlaybackMode)
                         .WithFallbackBlob(fallbackBlob, fallbackHash);
+                }
+                else if (authoring.fallbackAnimationClip != null)
+                {
+                    Debug.LogWarning(
+                        $"{nameof(TimelineAnimationStateAuthoring)} on '{authoring.name}' has a fallbackAnimationClip assigned but no avatar " +
+                        $"(missing {nameof(RigDefinitionAuthoring)} or its Avatar is unassigned). The fallback animation was dropped.",
+                        authoring);
                 }
 
                 builder.ApplyTo(ref commands);

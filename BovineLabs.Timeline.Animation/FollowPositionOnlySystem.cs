@@ -68,10 +68,18 @@ namespace BovineLabs.Timeline.Animation
                     return;
 
                 if (ParentLookup.TryGetComponent(entity, out var selfParent) &&
-                    LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W))
-                    lt.Position = math.transform(math.inverse(parentL2W.Value), targetPos);
+                    LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W) &&
+                    math.abs(math.determinant(parentL2W.Value)) > math.EPSILON)
+                {
+                    var localPos = math.transform(math.inverse(parentL2W.Value), targetPos);
+                    lt.Position = math.all(math.isfinite(localPos)) ? localPos : targetPos;
+                }
                 else
+                {
+                    // Singular/degenerate parent (zero-scale axis or not-yet-initialized default LocalToWorld)
+                    // would make math.inverse produce NaN/Inf; treat as no parent.
                     lt.Position = targetPos;
+                }
             }
         }
     }

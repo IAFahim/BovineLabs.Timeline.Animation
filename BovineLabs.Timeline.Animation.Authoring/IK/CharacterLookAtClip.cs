@@ -51,7 +51,17 @@ namespace BovineLabs.Timeline.Animation.Authoring
             if (sourceMode == PointSourceMode.LinkedTarget && key == 0)
                 Debug.LogError($"{nameof(CharacterLookAtClip)} '{name}' uses LinkedTarget but lookTargetLink is unassigned or unresolved; the look-at will do nothing.", this);
 
-            var staticOrOffset = sourceMode == PointSourceMode.StaticWorld ? staticWorldPoint : ownerLocalOffset;
+            // StaticOrOffsetPoint is only meaningful for StaticWorld (an absolute world point) and OwnerOffset
+            // (a local offset transformed by the owner). For LinkedTarget the point comes solely from the resolved
+            // link at runtime; packing ownerLocalOffset here would be reinterpreted as an absolute world point by
+            // PrepareJob whenever the link fails to resolve (source destroyed / not yet spawned / no LocalToWorld),
+            // silently aiming the head at that offset. Leave it zero so an unresolved link does not inject a stale point.
+            float3 staticOrOffset = sourceMode switch
+            {
+                PointSourceMode.StaticWorld => staticWorldPoint,
+                PointSourceMode.OwnerOffset => ownerLocalOffset,
+                _ => float3.zero,
+            };
 
             var builder = new CharacterLookAtBuilder
             {

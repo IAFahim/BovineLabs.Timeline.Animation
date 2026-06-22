@@ -88,6 +88,15 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 return;
             }
 
+            var avatar = rigDef.GetAvatar();
+
+            if (avatar == null)
+            {
+                Debug.LogWarning($"[RukhankaAnimationTrack] '{name}' rig '{rigDef.name}' has no Avatar — animation data will not be baked.");
+                base.Bake(context);
+                return;
+            }
+
             var baker = context.Baker;
             var trackEntity = context.TrackEntity;
 
@@ -102,7 +111,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 AvatarMaskHash = avatarMaskHash
             });
 
-            BakeFallbackOverride(baker, trackEntity, rigDef, avatarMaskHash);
+            BakeFallbackOverride(baker, trackEntity, avatar, avatarMaskHash);
 
             var clipComponents = GetClips()
                 .Select(c => c.asset as RukhankaAnimationClip)
@@ -137,7 +146,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     }
 
                     var baked = new AnimationClipBaker().BakeAnimations(
-                        baker, clips.ToArray(), rigDef.GetAvatar(), rigDef.gameObject, applyFootIK);
+                        baker, clips.ToArray(), avatar, rigDef.gameObject, applyFootIK);
                     buffer.AddValidAnimations(baked);
 
                     if (baked.IsCreated)
@@ -176,9 +185,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
             return maskBlob.Value.hash;
         }
 
-        private void BakeFallbackOverride(IBaker baker, Entity trackEntity, RigDefinitionAuthoring rigDef, Hash128 avatarMaskHash)
+        private void BakeFallbackOverride(IBaker baker, Entity trackEntity, Avatar avatar, Hash128 avatarMaskHash)
         {
-            if (ExitIdleClip == null || !ExitIdleClip.TryComputeHash(rigDef.GetAvatar(), out var exitIdleHash))
+            if (ExitIdleClip == null || !ExitIdleClip.TryComputeHash(avatar, out var exitIdleHash))
             {
                 return;
             }

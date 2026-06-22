@@ -206,6 +206,11 @@ namespace BovineLabs.Timeline.Animation
                         clipData.Value = float2.zero;
                     }
                 }
+
+                // A non-finite dynamic source (NaN/Inf move-input or physics velocity) must not poison
+                // the blend; collapse it to the zero/centroid direction instead.
+                clipData.Value = math.select(clipData.Value, float2.zero,
+                    math.isnan(clipData.Value) | math.isinf(clipData.Value));
             }
         }
 
@@ -492,6 +497,17 @@ namespace BovineLabs.Timeline.Animation
                         ScriptedAnimator.ComputeBlendTree2DFreeformDirectional(blendTreePositions, blendedDirection),
                     _ => default
                 };
+
+                // Only the three 2D blend types above allocate a real NativeList. Any other BlendTreeType
+                // (BlendTree1D, BlendTreeDirect, single-clip, etc.) hits `_ => default`, which returns an
+                // uncreated list whose internal pointer is null - reading .Length or calling .Dispose() on it
+                // is a null-pointer deref (hard crash in a Burst release build). Bail out before touching it.
+                if (!internalWeights.IsCreated)
+                {
+                    this.Logger.LogWarning512(
+                        "[BlendTree2D] Unsupported BlendTreeType on track; only 2D blend types are handled. Track will be skipped.");
+                    return;
+                }
 
                 var weightedDuration = 0f;
                 var totalBlendWeight = 0f;
