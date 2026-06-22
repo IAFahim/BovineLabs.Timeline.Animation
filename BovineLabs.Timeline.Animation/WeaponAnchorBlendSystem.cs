@@ -153,11 +153,11 @@ namespace BovineLabs.Timeline.Animation
 
                 if (ParentLookup.TryGetComponent(entity, out var parent) &&
                     LocalToWorldLookup.TryGetComponent(parent.Value, out var parentL2W) &&
-                    math.abs(math.determinant(parentL2W.Value)) > 1e-8f)
+                    TransformConversion.WorldToParentLocal(parentL2W.Value, worldPosition, worldRotation,
+                        out var localPosition, out var localRotation))
                 {
-                    var parentRotation = new quaternion(math.orthonormalize(new float3x3(parentL2W.Value)));
-                    transform.Position = math.transform(math.inverse(parentL2W.Value), worldPosition);
-                    transform.Rotation = math.mul(math.inverse(parentRotation), worldRotation);
+                    transform.Position = localPosition;
+                    transform.Rotation = localRotation;
                 }
                 else
                 {

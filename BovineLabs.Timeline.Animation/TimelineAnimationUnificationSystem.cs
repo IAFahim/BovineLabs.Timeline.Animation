@@ -67,8 +67,7 @@ namespace BovineLabs.Timeline.Animation
                 IntegrateWeights(ref smoothEntries, fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
 
                 var baseLayer = fallbackData.LayerIndex;
-                var baseControl = IntegrateBaseLayerControl(ref timer, in smoothEntries, baseLayer,
-                    fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
+                var baseControl = BaseLayerControl(in smoothEntries, baseLayer);
 
                 EmitFallback(ref timer, in fallbackData, baseControl, ref atps);
 
@@ -187,12 +186,9 @@ namespace BovineLabs.Timeline.Animation
                 }
             }
 
-            private float IntegrateBaseLayerControl(
-                ref BlendGroupTimer timer,
+            private static float BaseLayerControl(
                 in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
-                int baseLayer,
-                float blendInSpeed,
-                float blendOutSpeed)
+                int baseLayer)
             {
                 var baseSum = 0f;
                 for (var i = 0; i < smoothEntries.Length; i++)
@@ -213,7 +209,7 @@ namespace BovineLabs.Timeline.Animation
                 float baseControl,
                 ref DynamicBuffer<AnimationToProcessComponent> atps)
             {
-                var fallbackWeight = 1f - baseControl;
+                var fallbackWeight = BlendLayerMath.FallbackWeight(baseControl);
 
                 if (fallbackWeight <= WeightEpsilon || fallbackData.ClipHash == default)
                     return;
@@ -241,12 +237,9 @@ namespace BovineLabs.Timeline.Animation
                     timer.FallbackAccumulatedTime += fallbackAdvance;
                 }
 
-                var fallbackTime = fallbackData.PlaybackMode switch
-                {
-                    FallbackPlaybackMode.Clamp => math.min(timer.FallbackAccumulatedTime, 1f),
-                    FallbackPlaybackMode.Hold => math.min(timer.FallbackAccumulatedTime, 1f),
-                    _ => math.frac(timer.FallbackAccumulatedTime)
-                };
+                var fallbackTime = fallbackData.PlaybackMode == FallbackPlaybackMode.Loop
+                    ? math.frac(timer.FallbackAccumulatedTime)
+                    : math.min(timer.FallbackAccumulatedTime, 1f);
 
                 atps.Add(new AnimationToProcessComponent
                 {
@@ -308,14 +301,13 @@ namespace BovineLabs.Timeline.Animation
 
                         if (s.LayerIndex == baseLayer)
                         {
-                            var normalizeFactor = layerSum > WeightEpsilon ? baseControl / layerSum : 0f;
-                            weight = s.CurrentWeight * normalizeFactor;
+                            weight = BlendLayerMath.NormalizeBaseLayerWeight(s.CurrentWeight, baseControl, layerSum);
                             layerWeight = 1.0f;
                         }
                         else
                         {
-                            weight = s.CurrentWeight / math.max(WeightEpsilon, layerSum);
-                            layerWeight = math.saturate(layerSum);
+                            weight = BlendLayerMath.NormalizeAdditionalLayerWeight(s.CurrentWeight, layerSum);
+                            layerWeight = BlendLayerMath.AdditionalLayerWeight(layerSum);
                         }
                     }
                     else

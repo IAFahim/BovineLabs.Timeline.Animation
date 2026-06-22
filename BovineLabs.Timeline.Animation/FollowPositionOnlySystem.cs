@@ -69,9 +69,9 @@ namespace BovineLabs.Timeline.Animation
 
                 if (ParentLookup.TryGetComponent(entity, out var selfParent) &&
                     LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W) &&
-                    math.abs(math.determinant(parentL2W.Value)) > math.EPSILON)
+                    TransformConversion.WorldPositionToParentLocal(parentL2W.Value, targetPos, math.EPSILON,
+                        out var localPos))
                 {
-                    var localPos = math.transform(math.inverse(parentL2W.Value), targetPos);
                     lt.Position = math.all(math.isfinite(localPos)) ? localPos : targetPos;
                 }
                 else

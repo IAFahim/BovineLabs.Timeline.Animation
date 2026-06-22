@@ -9,30 +9,7 @@ namespace BovineLabs.Timeline.Animation.Tests
     [TestFixture]
     public class UnifyAnimationsBlendMathTests
     {
-        private const float WeightEpsilon = 0.0001f;
-
         private const int LayerSumCapacity = 64;
-
-        private static float NormalizeBaseLayerWeight(float currentWeight, float baseControl, float layerSum)
-        {
-            var normalizeFactor = layerSum > WeightEpsilon ? baseControl / layerSum : 0f;
-            return currentWeight * normalizeFactor;
-        }
-
-        private static float NormalizeAdditionalLayerWeight(float currentWeight, float layerSum)
-        {
-            return currentWeight / math.max(WeightEpsilon, layerSum);
-        }
-
-        private static float AdditionalLayerWeight(float layerSum)
-        {
-            return math.saturate(layerSum);
-        }
-
-        private static float FallbackWeight(float baseControl)
-        {
-            return 1f - baseControl;
-        }
 
         private static float OverrideSumForLayerLinear(
             in NativeArray<float> weights,
@@ -69,8 +46,8 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void OverrideBaseLayer_NormalizesByLayerSum_ScaledByBaseControl()
         {
-            var weightA = NormalizeBaseLayerWeight(0.6f, 1f, 0.6f + 0.2f);
-            var weightB = NormalizeBaseLayerWeight(0.2f, 1f, 0.6f + 0.2f);
+            var weightA = BlendLayerMath.NormalizeBaseLayerWeight(0.6f, 1f, 0.6f + 0.2f);
+            var weightB = BlendLayerMath.NormalizeBaseLayerWeight(0.2f, 1f, 0.6f + 0.2f);
 
             Assert.AreEqual(0.75f, weightA, 1e-6f);
             Assert.AreEqual(0.25f, weightB, 1e-6f);
@@ -81,8 +58,8 @@ namespace BovineLabs.Timeline.Animation.Tests
         public void OverrideBaseLayer_BaseControlScalesTotalWeight()
         {
             var baseControl = 0.5f;
-            var weightA = NormalizeBaseLayerWeight(0.6f, baseControl, 0.8f);
-            var weightB = NormalizeBaseLayerWeight(0.2f, baseControl, 0.8f);
+            var weightA = BlendLayerMath.NormalizeBaseLayerWeight(0.6f, baseControl, 0.8f);
+            var weightB = BlendLayerMath.NormalizeBaseLayerWeight(0.2f, baseControl, 0.8f);
 
             Assert.AreEqual(baseControl, weightA + weightB, 1e-6f);
         }
@@ -90,15 +67,21 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void OverrideBaseLayer_ZeroLayerSum_YieldsZeroWeight()
         {
-            Assert.AreEqual(0f, NormalizeBaseLayerWeight(0.6f, 1f, 0f));
+            Assert.AreEqual(0f, BlendLayerMath.NormalizeBaseLayerWeight(0.6f, 1f, 0f));
+        }
+
+        [Test]
+        public void BlendLayerMath_NormalizeBaseLayerWeight_NegativeBaseControlPassesThrough()
+        {
+            Assert.AreEqual(-0.375f, BlendLayerMath.NormalizeBaseLayerWeight(0.6f, -0.5f, 0.8f), 1e-6f);
         }
 
         [Test]
         public void OverrideAdditionalLayer_NormalizesWeightAndSaturatesLayerWeight()
         {
             var layerSum = 0.4f + 0.4f;
-            var weight = NormalizeAdditionalLayerWeight(0.4f, layerSum);
-            var layerWeight = AdditionalLayerWeight(layerSum);
+            var weight = BlendLayerMath.NormalizeAdditionalLayerWeight(0.4f, layerSum);
+            var layerWeight = BlendLayerMath.AdditionalLayerWeight(layerSum);
 
             Assert.AreEqual(0.5f, weight, 1e-6f);
             Assert.AreEqual(0.8f, layerWeight, 1e-6f);
@@ -107,7 +90,16 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void OverrideAdditionalLayer_LayerSumAboveOne_SaturatesToOne()
         {
-            Assert.AreEqual(1f, AdditionalLayerWeight(1.5f));
+            Assert.AreEqual(1f, BlendLayerMath.AdditionalLayerWeight(1.5f));
+        }
+
+        [Test]
+        public void BlendLayerMath_NormalizeAdditionalLayerWeight_ZeroLayerSum_UsesEpsilonFloor()
+        {
+            var weight = BlendLayerMath.NormalizeAdditionalLayerWeight(0.5f, 0f);
+
+            Assert.AreEqual(0.5f / BlendLayerMath.WeightEpsilon, weight, 1e-3f);
+            Assert.IsFalse(float.IsInfinity(weight));
         }
 
         [Test]
@@ -120,9 +112,9 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void Fallback_WeightIsComplementOfBaseControl()
         {
-            Assert.AreEqual(1f, FallbackWeight(0f));
-            Assert.AreEqual(0.25f, FallbackWeight(0.75f), 1e-6f);
-            Assert.AreEqual(0f, FallbackWeight(1f), 1e-6f);
+            Assert.AreEqual(1f, BlendLayerMath.FallbackWeight(0f));
+            Assert.AreEqual(0.25f, BlendLayerMath.FallbackWeight(0.75f), 1e-6f);
+            Assert.AreEqual(0f, BlendLayerMath.FallbackWeight(1f), 1e-6f);
         }
 
         [Test]
@@ -131,7 +123,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             for (var i = 0; i <= 10; i++)
             {
                 var baseControl = i / 10f;
-                Assert.AreEqual(1f, baseControl + FallbackWeight(baseControl), 1e-6f);
+                Assert.AreEqual(1f, baseControl + BlendLayerMath.FallbackWeight(baseControl), 1e-6f);
             }
         }
 

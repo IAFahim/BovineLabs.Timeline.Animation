@@ -7,7 +7,6 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEngine.Timeline;
 using Hash128 = Unity.Entities.Hash128;
 
 namespace BovineLabs.Timeline.Animation
@@ -111,24 +110,10 @@ namespace BovineLabs.Timeline.Animation
 
                 var extrapolation = timeInSeconds < 0f ? clipData.PreExtrapolation : clipData.PostExtrapolation;
 
-                float normalizedTime;
-                if (extrapolation == TimelineClip.ClipExtrapolation.PingPong)
-                {
-                    var t = math.fmod(math.abs(timeInSeconds), duration * 2f);
-                    normalizedTime = (duration - math.abs(t - duration)) / duration;
-                }
-                else if (extrapolation == TimelineClip.ClipExtrapolation.Loop || clipBlob.Value.looped)
-                {
-                    normalizedTime = math.frac(timeInSeconds / duration);
-                }
-                else
-                {
-                    normalizedTime = math.saturate(timeInSeconds / duration);
-                }
+                var normalizedTime = ClipSampling.NormalizedClipTime(timeInSeconds, duration, extrapolation, clipBlob.Value.looped);
 
-                var finalPosOffset = trackData.TrackPositionOffset +
-                                     math.rotate(trackData.TrackRotationOffset, clipData.PositionOffset);
-                var finalRotOffset = math.mul(trackData.TrackRotationOffset, clipData.RotationOffset);
+                ClipSampling.ComposeTrackClipOffset(trackData.TrackPositionOffset, trackData.TrackRotationOffset,
+                    clipData.PositionOffset, clipData.RotationOffset, out var finalPosOffset, out var finalRotOffset);
 
                 ActiveAnimations.Add(binding.Value, new BlendGroupEntry
                 {
