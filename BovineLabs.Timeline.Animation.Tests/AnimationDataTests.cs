@@ -258,16 +258,16 @@ namespace BovineLabs.Timeline.Animation.Tests
     [TestFixture]
     public class DefaultBlendGroupFallbackTests
     {
-        private readonly List<BlobAssetReference<FallbackBlend>> blobs = new();
-
         [TearDown]
         public void DisposeBlobs()
         {
-            foreach (var blob in this.blobs)
+            foreach (var blob in blobs)
                 if (blob.IsCreated)
                     blob.Dispose();
-            this.blobs.Clear();
+            blobs.Clear();
         }
+
+        private readonly List<BlobAssetReference<FallbackBlend>> blobs = new();
 
         private BlobAssetReference<FallbackBlend> Blob(FallbackBlend value)
         {
@@ -275,7 +275,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             builder.ConstructRoot<FallbackBlend>() = value;
             var blob = builder.CreateBlobAssetReference<FallbackBlend>(Allocator.Persistent);
             builder.Dispose();
-            this.blobs.Add(blob);
+            blobs.Add(blob);
             return blob;
         }
 
@@ -319,7 +319,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 RemoveStartOffset = true,
                 ApplyFootIK = true
             };
-            var d = new DefaultBlendGroupFallback { Value = this.Blob(fallback) };
+            var d = new DefaultBlendGroupFallback { Value = Blob(fallback) };
 
             Assert.IsTrue(d.Value.IsCreated);
             ref var v = ref d.Value.Value;

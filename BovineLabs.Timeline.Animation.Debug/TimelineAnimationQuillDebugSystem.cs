@@ -162,12 +162,10 @@ namespace BovineLabs.Timeline.Animation.Debug
 
                 var tier = TimelineDebugTier.Resolve(root, Viewer, HasViewer);
 
-                // Far: the animation-state ring — what this entity is doing. No text.
                 Drawer.Circle(root + new float3(0f, 0.08f, 0f), new float3(0f, 0.35f, 0f), RingColor());
 
                 if (tier >= DebugTier.Mid)
                 {
-                    // Mid: the fallback direction + one short label.
                     if (DrawFallback && math.lengthsq(fallback.PositionOffset) > 0.0001f)
                         Drawer.Arrow(root + new float3(0f, 1.05f, 0f), fallback.PositionOffset, FallbackColor());
 
@@ -176,7 +174,6 @@ namespace BovineLabs.Timeline.Animation.Debug
 
                 if (tier == DebugTier.Close)
                 {
-                    // Close: every number — full label, weight bars, and the debug-state summary.
                     var label = default(FixedString128Bytes);
                     label.Append((FixedString32Bytes)"Anim sm:");
                     label.Append(smoothEntries.Length);
@@ -265,7 +262,6 @@ namespace BovineLabs.Timeline.Animation.Debug
 
                 var tier = TimelineDebugTier.Resolve(targetLtw.Position, Viewer, HasViewer);
 
-                // Far: the blend direction — what this clip is steering. No text.
                 if (math.lengthsq(flatDir) > 0.0001f)
                     Drawer.Arrow(origin, math.normalize(flatDir) * (0.75f * math.saturate(weight)), color);
                 else
@@ -273,7 +269,6 @@ namespace BovineLabs.Timeline.Animation.Debug
 
                 if (tier >= DebugTier.Mid)
                 {
-                    // Mid: the offset arrow + one short label.
                     if (math.lengthsq(directionClip.PositionOffset) > 0.0001f)
                         Drawer.Arrow(origin + new float3(0f, 0.2f, 0f), directionClip.PositionOffset * 0.35f,
                             OffsetColor());
@@ -289,7 +284,6 @@ namespace BovineLabs.Timeline.Animation.Debug
 
                 if (tier == DebugTier.Close && DrawClipLabels)
                 {
-                    // Close: every number — weight, time, layer, and the motion-point map.
                     var label = default(FixedString128Bytes);
                     label.Append((FixedString32Bytes)"BT2D ");
                     label.Append(ReadKindName(directionClip.ReadKind));

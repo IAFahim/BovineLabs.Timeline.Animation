@@ -5,8 +5,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 {
     public class CharacterLookAtRigAuthoring : MonoBehaviour
     {
-        [Header("Bones")]
-        public Transform neckBone;
+        [Header("Bones")] public Transform neckBone;
 
         public Transform headBone;
 
@@ -14,15 +13,13 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         [Range(0f, 1f)] public float headWeight = 0.6f;
 
-        [Header("Aim")]
-        public Vector3 forwardVector = Vector3.forward;
+        [Header("Aim")] public Vector3 forwardVector = Vector3.forward;
 
         public float angleLimitMin = -80f;
 
         public float angleLimitMax = 80f;
 
-        [Header("Target")]
-        public Transform lookAtTarget;
+        [Header("Target")] public Transform lookAtTarget;
 
         private class CharacterLookAtRigBaker : Baker<CharacterLookAtRigAuthoring>
         {

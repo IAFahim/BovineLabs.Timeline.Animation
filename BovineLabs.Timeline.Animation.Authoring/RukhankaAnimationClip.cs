@@ -11,18 +11,17 @@ namespace BovineLabs.Timeline.Animation.Authoring
 {
     public class RukhankaAnimationClip : DOTSClip, ITimelineClipAsset
     {
-        private const ClipCaps SupportedClipCaps = ClipCaps.Looping | ClipCaps.Extrapolation | ClipCaps.ClipIn | ClipCaps.SpeedMultiplier | ClipCaps.Blending;
+        private const ClipCaps SupportedClipCaps = ClipCaps.Looping | ClipCaps.Extrapolation | ClipCaps.ClipIn |
+                                                   ClipCaps.SpeedMultiplier | ClipCaps.Blending;
 
         [Tooltip("The animation clip to play when this timeline clip is active.")]
         public AnimationClip animationClipHolder;
 
-        [Header("Clip Transform Offsets")]
-        public Vector3 positionOffset = Vector3.zero;
+        [Header("Clip Transform Offsets")] public Vector3 positionOffset = Vector3.zero;
 
         public Vector3 eulerAnglesOffset = Vector3.zero;
 
-        [Space]
-        [Tooltip("Removes the starting offset of the animation so it begins exactly at the track's offset.")]
+        [Space] [Tooltip("Removes the starting offset of the animation so it begins exactly at the track's offset.")]
         public bool removeStartOffset = true;
 
         public bool applyFootIK = true;
@@ -54,18 +53,13 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 Avatar avatar = null;
                 var rigDef = context.Director.ResolveRigDefinition(context.Track);
 
-                if (rigDef != null)
-                {
-                    avatar = rigDef.GetAvatar();
-                }
+                if (rigDef != null) avatar = rigDef.GetAvatar();
 
-                // Register the baked source assets so editing the clip or avatar re-triggers baking.
                 context.Baker.DependsOn(animationClipHolder);
                 context.Baker.DependsOn(avatar);
 
                 var builder = new RukhankaAnimationBuilder
                 {
-                    // Must match the variant baked by RukhankaAnimationTrack (foot-IK on/off → different blob hash).
                     ClipHash = BakingUtils.ComputeAnimationHash(animationClipHolder, avatar, applyFootIK),
                     PreExtrapolation = context.Clip.preExtrapolationMode,
                     PostExtrapolation = context.Clip.postExtrapolationMode,

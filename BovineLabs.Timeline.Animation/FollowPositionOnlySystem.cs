@@ -76,8 +76,6 @@ namespace BovineLabs.Timeline.Animation
                 }
                 else
                 {
-                    // Singular/degenerate parent (zero-scale axis or not-yet-initialized default LocalToWorld)
-                    // would make math.inverse produce NaN/Inf; treat as no parent.
                     lt.Position = targetPos;
                 }
             }

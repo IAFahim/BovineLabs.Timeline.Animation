@@ -12,18 +12,18 @@ namespace BovineLabs.Timeline.Animation.Tests
 {
     public class TimelineFallbackOverrideSystemTests : ECSTestsFixture
     {
-        private static readonly Hash128 DefaultClip = new Hash128(1u, 2u, 3u, 4u);
-        private static readonly Hash128 OverrideClip = new Hash128(5u, 6u, 7u, 8u);
+        private static readonly Hash128 DefaultClip = new(1u, 2u, 3u, 4u);
+        private static readonly Hash128 OverrideClip = new(5u, 6u, 7u, 8u);
 
         private readonly List<BlobAssetReference<FallbackBlend>> fallbackBlobs = new();
 
         [TearDown]
         public void DisposeFallbackBlobs()
         {
-            foreach (var blob in this.fallbackBlobs)
+            foreach (var blob in fallbackBlobs)
                 if (blob.IsCreated)
                     blob.Dispose();
-            this.fallbackBlobs.Clear();
+            fallbackBlobs.Clear();
         }
 
         private BlobAssetReference<FallbackBlend> DefaultBlob(FallbackBlend value)
@@ -32,7 +32,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             builder.ConstructRoot<FallbackBlend>() = value;
             var blob = builder.CreateBlobAssetReference<FallbackBlend>(Allocator.Persistent);
             builder.Dispose();
-            this.fallbackBlobs.Add(blob);
+            fallbackBlobs.Add(blob);
             return blob;
         }
 
@@ -41,14 +41,15 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             var system = World.CreateSystem<TimelineFallbackOverrideSystem>();
             var actor = CreateActor();
-            var track = CreateTrack(MakeOverride(OverrideClip, blendIn: 5f, blendOut: 7f, FallbackPlaybackMode.Clamp, layer: 1));
+            var track = CreateTrack(MakeOverride(OverrideClip, 5f, 7f, FallbackPlaybackMode.Clamp, 1));
             CreateActiveClip(actor, track);
 
             system.Update(WorldUnmanaged);
             Manager.CompleteAllTrackedJobs();
 
             var fb = Manager.GetComponentData<FallbackBlend>(actor);
-            Assert.AreEqual(OverrideClip, fb.ClipHash, "override clip should latch onto the actor while its clip is active");
+            Assert.AreEqual(OverrideClip, fb.ClipHash,
+                "override clip should latch onto the actor while its clip is active");
             Assert.AreEqual(5f, fb.BlendInSpeed);
             Assert.AreEqual(7f, fb.BlendOutSpeed);
             Assert.AreEqual(FallbackPlaybackMode.Clamp, fb.PlaybackMode);
@@ -57,28 +58,25 @@ namespace BovineLabs.Timeline.Animation.Tests
             World.DestroySystem(system);
         }
 
-        // The regression: once a TrackFallbackOverride latched, the old code never restored the
-        // baked DefaultBlendGroupFallback, leaving the actor stuck on a stale override forever.
         [Test]
         public void RestoresDefault_WhenClipNoLongerActive()
         {
             var system = World.CreateSystem<TimelineFallbackOverrideSystem>();
             var actor = CreateActor();
-            var track = CreateTrack(MakeOverride(OverrideClip, blendIn: 5f, blendOut: 7f, FallbackPlaybackMode.Clamp, layer: 1));
+            var track = CreateTrack(MakeOverride(OverrideClip, 5f, 7f, FallbackPlaybackMode.Clamp, 1));
             var clip = CreateActiveClip(actor, track);
 
-            // Frame 1: clip active -> override latches.
             system.Update(WorldUnmanaged);
             Manager.CompleteAllTrackedJobs();
             Assert.AreEqual(OverrideClip, Manager.GetComponentData<FallbackBlend>(actor).ClipHash);
 
-            // Frame 2: clip ends -> actor has no active override and must restore to default.
             Manager.SetComponentEnabled<ClipActive>(clip, false);
             system.Update(WorldUnmanaged);
             Manager.CompleteAllTrackedJobs();
 
             var fb = Manager.GetComponentData<FallbackBlend>(actor);
-            Assert.AreEqual(DefaultClip, fb.ClipHash, "fallback must restore to the baked default once the override clip ends");
+            Assert.AreEqual(DefaultClip, fb.ClipHash,
+                "fallback must restore to the baked default once the override clip ends");
             Assert.AreEqual(2f, fb.BlendInSpeed);
             Assert.AreEqual(3f, fb.BlendOutSpeed);
             Assert.AreEqual(FallbackPlaybackMode.Loop, fb.PlaybackMode);
@@ -87,21 +85,19 @@ namespace BovineLabs.Timeline.Animation.Tests
             World.DestroySystem(system);
         }
 
-        // The early-out fix: latch must update when only the blend params change, not just the clip hash.
         [Test]
         public void Latch_AppliesBlendSpeedChange_OnSameClipHash()
         {
             var system = World.CreateSystem<TimelineFallbackOverrideSystem>();
             var actor = CreateActor();
-            var track = CreateTrack(MakeOverride(OverrideClip, blendIn: 5f, blendOut: 7f, FallbackPlaybackMode.Clamp, layer: 1));
+            var track = CreateTrack(MakeOverride(OverrideClip, 5f, 7f, FallbackPlaybackMode.Clamp, 1));
             CreateActiveClip(actor, track);
 
             system.Update(WorldUnmanaged);
             Manager.CompleteAllTrackedJobs();
             Assert.AreEqual(7f, Manager.GetComponentData<FallbackBlend>(actor).BlendOutSpeed);
 
-            // Same clip hash, different blend-out speed — must still take effect.
-            Manager.SetComponentData(track, MakeOverride(OverrideClip, blendIn: 5f, blendOut: 99f, FallbackPlaybackMode.Clamp, layer: 1));
+            Manager.SetComponentData(track, MakeOverride(OverrideClip, 5f, 99f, FallbackPlaybackMode.Clamp, 1));
             system.Update(WorldUnmanaged);
             Manager.CompleteAllTrackedJobs();
 
@@ -122,10 +118,10 @@ namespace BovineLabs.Timeline.Animation.Tests
                 PlaybackMode = FallbackPlaybackMode.Loop,
                 LayerIndex = 0,
                 BlendMode = AnimationBlendingMode.Override,
-                RotationOffset = quaternion.identity,
+                RotationOffset = quaternion.identity
             };
             Manager.AddComponentData(actor, fallback);
-            Manager.AddComponentData(actor, new DefaultBlendGroupFallback { Value = this.DefaultBlob(fallback) });
+            Manager.AddComponentData(actor, new DefaultBlendGroupFallback { Value = DefaultBlob(fallback) });
             return actor;
         }
 
@@ -142,7 +138,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 BlendMode = AnimationBlendingMode.Override,
                 RotationOffset = quaternion.identity,
                 RemoveStartOffset = true,
-                ApplyFootIK = true,
+                ApplyFootIK = true
             };
         }
 
@@ -155,7 +151,8 @@ namespace BovineLabs.Timeline.Animation.Tests
 
         private Entity CreateActiveClip(Entity actor, Entity track)
         {
-            var clip = Manager.CreateEntity(typeof(Clip), typeof(TrackBinding), typeof(ClipActive), typeof(TimelineActive));
+            var clip = Manager.CreateEntity(typeof(Clip), typeof(TrackBinding), typeof(ClipActive),
+                typeof(TimelineActive));
             Manager.SetComponentData(clip, new Clip { Track = track });
             Manager.SetComponentData(clip, new TrackBinding { Value = actor });
             Manager.SetComponentEnabled<ClipActive>(clip, true);

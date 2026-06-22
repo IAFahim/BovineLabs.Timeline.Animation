@@ -14,14 +14,12 @@ namespace BovineLabs.Timeline.Animation.Editor
         {
             var options = base.GetClipOptions(clip);
 
-            if (clip.asset is not CharacterLookAtClip asset)
-            {
-                return options;
-            }
+            if (clip.asset is not CharacterLookAtClip asset) return options;
 
             if (asset.sourceMode == PointSourceMode.LinkedTarget && asset.lookTargetLink == null)
             {
-                options.errorText = "Linked Target mode requires a Look Target Link. Assign an EntityLinkSchema or switch source mode.";
+                options.errorText =
+                    "Linked Target mode requires a Look Target Link. Assign an EntityLinkSchema or switch source mode.";
                 options.highlightColor = WarningHighlight;
             }
 

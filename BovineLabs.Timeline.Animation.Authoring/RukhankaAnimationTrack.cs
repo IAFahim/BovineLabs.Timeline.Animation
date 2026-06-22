@@ -22,36 +22,44 @@ namespace BovineLabs.Timeline.Animation.Authoring
     [DisplayName("BovineLabs/Animation/Rukhanka Clip")]
     public class RukhankaAnimationTrack : DOTSTrack
     {
-        [Tooltip("Layer index. 0 = base (full body). Put each masked region on its own layer >= 1 so it overrides only its masked bones over the layers below. Two clips that should play on different body parts at full strength (e.g. upper body + lower body, or left arm + right arm) must be on different layers, each with its own Avatar Mask.")]
+        [Tooltip(
+            "Layer index. 0 = base (full body). Put each masked region on its own layer >= 1 so it overrides only its masked bones over the layers below. Two clips that should play on different body parts at full strength (e.g. upper body + lower body, or left arm + right arm) must be on different layers, each with its own Avatar Mask.")]
         public int LayerIndex;
 
         [Header("Track Offsets")]
-        [Tooltip("How track offsets are applied. In DOTS, ApplyTransformOffsets is the standard deterministic approach.")]
+        [Tooltip(
+            "How track offsets are applied. In DOTS, ApplyTransformOffsets is the standard deterministic approach.")]
         public TrackOffset trackOffset = TrackOffset.ApplyTransformOffsets;
 
         public Vector3 positionOffset = Vector3.zero;
 
         public Vector3 eulerAnglesOffset = Vector3.zero;
 
-        [Header("Avatar Mask")]
-        public AvatarMask avatarMask;
+        [Header("Avatar Mask")] public AvatarMask avatarMask;
 
         public bool applyAvatarMask = true;
 
         [Header("Exit / Fallback Override (Optional)")]
-        [Tooltip("Idle/fallback clip this track latches when it is the dominant active track. Lets a stance track own the idle so movement falls back to its idle, not the default idle. Highest LayerIndex wins among simultaneously active overrides; the latch persists until another override track takes over.")]
+        [Tooltip(
+            "Idle/fallback clip this track latches when it is the dominant active track. Lets a stance track own the idle so movement falls back to its idle, not the default idle. Highest LayerIndex wins among simultaneously active overrides; the latch persists until another override track takes over.")]
         public AnimationClip ExitIdleClip;
 
-        [Tooltip("Time in seconds to blend into this fallback clip.")]
-        [Min(0.001f)]
+        [Tooltip("Time in seconds to blend into this fallback clip.")] [Min(0.001f)]
         public float BlendInDuration = 0.25f;
 
-        [Tooltip("Time in seconds to blend out of this fallback clip.")]
-        [Min(0.001f)]
+        [Tooltip("Time in seconds to blend out of this fallback clip.")] [Min(0.001f)]
         public float BlendOutDuration = 0.25f;
 
         [Tooltip("How the fallback animation wraps.")]
         public FallbackPlaybackMode FallbackPlaybackMode = FallbackPlaybackMode.Loop;
+
+        private Vector3 OffsetPosition =>
+            trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero;
+
+        private Quaternion OffsetRotation =>
+            trackOffset == TrackOffset.ApplyTransformOffsets
+                ? Quaternion.Euler(eulerAnglesOffset)
+                : Quaternion.identity;
 
 #if UNITY_EDITOR
         public override Playable CreateTrackMixer(PlayableGraph graph, GameObject go, int inputCount)
@@ -83,7 +91,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
             if (rigDef == null)
             {
-                Debug.LogWarning($"[RukhankaAnimationTrack] '{name}' has no RigDefinitionAuthoring binding — animation data will not be baked.");
+                Debug.LogWarning(
+                    $"[RukhankaAnimationTrack] '{name}' has no RigDefinitionAuthoring binding — animation data will not be baked.");
                 base.Bake(context);
                 return;
             }
@@ -92,7 +101,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
             if (avatar == null)
             {
-                Debug.LogWarning($"[RukhankaAnimationTrack] '{name}' rig '{rigDef.name}' has no Avatar — animation data will not be baked.");
+                Debug.LogWarning(
+                    $"[RukhankaAnimationTrack] '{name}' rig '{rigDef.name}' has no Avatar — animation data will not be baked.");
                 base.Bake(context);
                 return;
             }
@@ -118,17 +128,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 .Where(h => h?.animationClipHolder != null)
                 .ToList();
 
-            // Foot IK is baked into the clip blob, so a clip's applyFootIK flag selects which blob variant to
-            // bake/reference (see ComputeAnimationHash overload). Group by flag; the same clip asset used both
-            // with and without foot IK is baked in BOTH variants (different hashes), so do not merge the sets.
             var footIkOnClips = clipComponents.Where(h => h.applyFootIK).Select(h => h.animationClipHolder).ToHashSet();
-            var footIkOffClips = clipComponents.Where(h => !h.applyFootIK).Select(h => h.animationClipHolder).ToHashSet();
+            var footIkOffClips = clipComponents.Where(h => !h.applyFootIK).Select(h => h.animationClipHolder)
+                .ToHashSet();
 
-            // ExitIdle fallback is baked foot-IK on (TrackFallbackOverride.ApplyFootIK = true above).
-            if (ExitIdleClip != null)
-            {
-                footIkOnClips.Add(ExitIdleClip);
-            }
+            if (ExitIdleClip != null) footIkOnClips.Add(ExitIdleClip);
 
             if (footIkOnClips.Count > 0 || footIkOffClips.Count > 0)
             {
@@ -140,37 +144,22 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
                 void BakeClipVariant(HashSet<AnimationClip> clips, bool applyFootIK)
                 {
-                    if (clips.Count == 0)
-                    {
-                        return;
-                    }
+                    if (clips.Count == 0) return;
 
                     var baked = new AnimationClipBaker().BakeAnimations(
                         baker, clips.ToArray(), avatar, rigDef.gameObject, applyFootIK);
                     buffer.AddValidAnimations(baked);
 
-                    if (baked.IsCreated)
-                    {
-                        baked.Dispose();
-                    }
+                    if (baked.IsCreated) baked.Dispose();
                 }
             }
 
             base.Bake(context);
         }
 
-        private Vector3 OffsetPosition =>
-            trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero;
-
-        private Quaternion OffsetRotation =>
-            trackOffset == TrackOffset.ApplyTransformOffsets ? Quaternion.Euler(eulerAnglesOffset) : Quaternion.identity;
-
         private Hash128 BakeAvatarMask(IBaker baker, Entity trackEntity, RigDefinitionAuthoring rigDef)
         {
-            if (!applyAvatarMask || avatarMask == null)
-            {
-                return default;
-            }
+            if (!applyAvatarMask || avatarMask == null) return default;
 
             var maskBaker = new AvatarMaskBaker();
             var maskBlob = maskBaker.CreateAvatarMaskBlob(baker, avatarMask, rigDef);
@@ -187,10 +176,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         private void BakeFallbackOverride(IBaker baker, Entity trackEntity, Avatar avatar, Hash128 avatarMaskHash)
         {
-            if (ExitIdleClip == null || !ExitIdleClip.TryComputeHash(avatar, out var exitIdleHash))
-            {
-                return;
-            }
+            if (ExitIdleClip == null || !ExitIdleClip.TryComputeHash(avatar, out var exitIdleHash)) return;
 
             baker.AddComponent(trackEntity, new TrackFallbackOverride
             {

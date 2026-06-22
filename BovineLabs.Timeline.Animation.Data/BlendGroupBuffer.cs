@@ -63,11 +63,6 @@ namespace BovineLabs.Timeline.Animation
         public bool ApplyFootIK;
     }
 
-    // The actor's baked reset target — the FallbackBlend to restore when no track override is
-    // active. Held by blob ref rather than inline (~80B) so that actors sharing an identical
-    // default fallback dedupe to a single blob via Baker.AddBlobAsset's content hash; the
-    // per-actor cost is then an 8-byte ref. ponytail: the win is dedup across many same-config
-    // actors — at a handful it's a wash; kept because actor/NPC counts are expected to grow.
     public struct DefaultBlendGroupFallback : IComponentData
     {
         public BlobAssetReference<FallbackBlend> Value;

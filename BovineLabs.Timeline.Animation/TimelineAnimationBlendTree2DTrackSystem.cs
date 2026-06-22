@@ -1,4 +1,5 @@
 using System;
+using BovineLabs.Core;
 using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
@@ -26,20 +27,13 @@ namespace BovineLabs.Timeline.Animation
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationBlendTree2DTrackSystem : ISystem
     {
-        /// <summary>
-        ///     Accumulated per-clip data for a single timeline clip on a blend tree track.
-        ///     Multiple clips may target the same track; their directions and weights are
-        ///     combined in <see cref="PerTrackBlend" /> before the actual blend tree evaluation.
-        /// </summary>
         internal struct TrackClipData
         {
             public Entity Track;
             public float AbsoluteTime;
 
-            /// <summary>Weighted direction contribution from this clip (pre-normalization).</summary>
             public float2 Direction;
 
-            /// <summary>Clip weight from ClipWeight component or default 1.0.</summary>
             public float Weight;
 
             public float3 PositionOffset;
@@ -138,7 +132,7 @@ namespace BovineLabs.Timeline.Animation
                 PlaybackStateLookup = _playbackState,
                 GlobalDeltaTime = SystemAPI.Time.DeltaTime,
                 IsScrubbing = isScrubbing,
-                Logger = SystemAPI.GetSingleton<BovineLabs.Core.BLLogger>()
+                Logger = SystemAPI.GetSingleton<BLLogger>()
             }.Schedule(_targetEntities, 64, state.Dependency);
         }
 
@@ -207,8 +201,6 @@ namespace BovineLabs.Timeline.Animation
                     }
                 }
 
-                // A non-finite dynamic source (NaN/Inf move-input or physics velocity) must not poison
-                // the blend; collapse it to the zero/centroid direction instead.
                 clipData.Value = math.select(clipData.Value, float2.zero,
                     math.isnan(clipData.Value) | math.isinf(clipData.Value));
             }
@@ -276,9 +268,7 @@ namespace BovineLabs.Timeline.Animation
             public float GlobalDeltaTime;
             public bool IsScrubbing;
 
-            // Burst-safe logger (BLLogger). UnityEngine.Debug.Log cannot be Burst-compiled, so missing-data
-            // warnings inside this job must go through BLLogger, which routes via Unity.Logging.
-            public BovineLabs.Core.BLLogger Logger;
+            public BLLogger Logger;
 
             public unsafe void Execute(int index)
             {
@@ -468,7 +458,7 @@ namespace BovineLabs.Timeline.Animation
                     var motionData = motions[i];
                     var found = AnimDB.TryGetValue(motionData.AnimationHash, out var cb);
                     if (!found)
-                        this.Logger.LogWarning512(
+                        Logger.LogWarning512(
                             "[BlendTree2D] Animation hash not found in BlobDatabaseSingleton. Motion entry will be skipped.");
                     blendTreeClips[i] = found ? cb : BlobAssetReference<AnimationClipBlob>.Null;
                     blendTreePositions[i] = motionData.BlendTree2DMotionElement;
@@ -498,13 +488,9 @@ namespace BovineLabs.Timeline.Animation
                     _ => default
                 };
 
-                // Only the three 2D blend types above allocate a real NativeList. Any other BlendTreeType
-                // (BlendTree1D, BlendTreeDirect, single-clip, etc.) hits `_ => default`, which returns an
-                // uncreated list whose internal pointer is null - reading .Length or calling .Dispose() on it
-                // is a null-pointer deref (hard crash in a Burst release build). Bail out before touching it.
                 if (!internalWeights.IsCreated)
                 {
-                    this.Logger.LogWarning512(
+                    Logger.LogWarning512(
                         "[BlendTree2D] Unsupported BlendTreeType on track; only 2D blend types are handled. Track will be skipped.");
                     return;
                 }
@@ -602,10 +588,6 @@ namespace BovineLabs.Timeline.Animation
                 internalWeights.Dispose();
             }
 
-            /// <summary>
-            ///     Removes BlendTreePlaybackStateElement entries for tracks that are no longer active.
-            ///     Stack-based version used when track count is within stackalloc capacity.
-            /// </summary>
             private unsafe void CleanupOrphanPlaybackStates(
                 Entity targetEntity,
                 PerTrackBlend* activeTracks,
@@ -629,10 +611,6 @@ namespace BovineLabs.Timeline.Animation
                 }
             }
 
-            /// <summary>
-            ///     Removes BlendTreePlaybackStateElement entries for tracks that are no longer active.
-            ///     Heap-based version used when track count exceeds stackalloc capacity.
-            /// </summary>
             private void CleanupOrphanPlaybackStatesHeap(
                 Entity targetEntity,
                 ref UnsafeList<PerTrackBlend> activeTracks)

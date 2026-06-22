@@ -58,25 +58,19 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public List<BlendTree2DMotionEntry> Motions = new();
 
 #if UNITY_EDITOR
-        /// <summary>
-        ///     In edit mode, create a native AnimationMixerPlayable and connect it
-        ///     to an AnimationPlayableOutput targeting the bound Animator.
-        ///     BlendTree2D clips return empty playables (DOTS-only content),
-        ///     but the output is still needed so the track doesn't leave a dangling graph.
-        /// </summary>
+
         public override Playable CreateTrackMixer(PlayableGraph graph, GameObject go, int inputCount)
         {
             if (!Application.isPlaying)
             {
                 var mixer = AnimationMixerPlayable.Create(graph, inputCount);
 
-                // Resolve the Animator from the binding (may be RigDefinitionAuthoring on same GO)
                 var director = go != null ? go.GetComponent<PlayableDirector>() : null;
                 var rawBinding = director != null ? director.GetGenericBinding(this) : null;
                 var animator = rawBinding as Animator ?? (rawBinding as Component)?.GetComponent<Animator>();
                 if (animator != null)
                 {
-                    animator.cullingMode = 0; // AlwaysAnimate
+                    animator.cullingMode = 0;
 
                     var output = AnimationPlayableOutput.Create(graph, name, animator);
                     output.SetSourcePlayable(mixer);

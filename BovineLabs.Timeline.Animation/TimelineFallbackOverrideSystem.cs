@@ -173,7 +173,6 @@ namespace BovineLabs.Timeline.Animation
         {
             public static bool Matches(in FallbackBlend f, in TrackFallbackOverride o)
             {
-                // Both halves carry the same blend payload; the hash field is the only naming difference.
                 return MatchesBlend(
                     in f, o.FallbackClipHash, o.BlendInSpeed, o.BlendOutSpeed, o.PlaybackMode, o.LayerIndex,
                     o.BlendMode, o.AvatarMaskHash, o.PositionOffset, o.RotationOffset, o.RemoveStartOffset,
@@ -188,9 +187,6 @@ namespace BovineLabs.Timeline.Animation
                     d.ApplyFootIK);
             }
 
-            // Single comparison spine shared by both overloads. The blend payload is identical between
-            // FallbackBlend and TrackFallbackOverride, so the caller unpacks the fields and this compares
-            // them against the FallbackBlend in one place.
             private static bool MatchesBlend(
                 in FallbackBlend f, Hash128 clipHash, float blendInSpeed, float blendOutSpeed,
                 FallbackPlaybackMode playbackMode, int layerIndex, AnimationBlendingMode blendMode,
@@ -198,16 +194,16 @@ namespace BovineLabs.Timeline.Animation
                 bool removeStartOffset, bool applyFootIK)
             {
                 return f.ClipHash == clipHash
-                    && f.BlendInSpeed == blendInSpeed
-                    && f.BlendOutSpeed == blendOutSpeed
-                    && f.PlaybackMode == playbackMode
-                    && f.LayerIndex == layerIndex
-                    && f.BlendMode == blendMode
-                    && f.AvatarMaskHash == avatarMaskHash
-                    && f.PositionOffset.Equals(positionOffset)
-                    && f.RotationOffset.Equals(rotationOffset)
-                    && f.RemoveStartOffset == removeStartOffset
-                    && f.ApplyFootIK == applyFootIK;
+                       && f.BlendInSpeed == blendInSpeed
+                       && f.BlendOutSpeed == blendOutSpeed
+                       && f.PlaybackMode == playbackMode
+                       && f.LayerIndex == layerIndex
+                       && f.BlendMode == blendMode
+                       && f.AvatarMaskHash == avatarMaskHash
+                       && f.PositionOffset.Equals(positionOffset)
+                       && f.RotationOffset.Equals(rotationOffset)
+                       && f.RemoveStartOffset == removeStartOffset
+                       && f.ApplyFootIK == applyFootIK;
             }
         }
     }

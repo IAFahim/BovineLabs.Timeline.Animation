@@ -1,5 +1,4 @@
 using BovineLabs.Testing;
-using BovineLabs.Timeline;
 using BovineLabs.Timeline.Data;
 using NUnit.Framework;
 using Rukhanka;
@@ -21,7 +20,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             var m = new MixData<CharacterLookAtData>
             {
                 Weights = new float4(1f, 0f, 0f, 0f),
-                Value1 = Point(p, 1f),
+                Value1 = Point(p, 1f)
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -37,7 +36,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             var m = new MixData<CharacterLookAtData>
             {
                 Weights = new float4(0.5f, 0f, 0f, 0f),
-                Value1 = Point(p, 1f),
+                Value1 = Point(p, 1f)
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -55,7 +54,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             {
                 Weights = new float4(0.5f, 0.5f, 0f, 0f),
                 Value1 = Point(a, 1f),
-                Value2 = Point(b, 1f),
+                Value2 = Point(b, 1f)
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -72,7 +71,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             {
                 Weights = new float4(0.5f, 0.5f, 0f, 0f),
                 Value1 = Point(a, 0.25f),
-                Value2 = Point(b, 0.75f),
+                Value2 = Point(b, 0.75f)
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -90,7 +89,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             {
                 Weights = new float4(0.5f, 0.5f, 0f, 0f),
                 Value1 = Point(garbage, 0f),
-                Value2 = Point(b, 1f),
+                Value2 = Point(b, 1f)
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -108,7 +107,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 Weights = new float4(1f, 1f, 0f, 0f),
                 Value1 = Point(a, 1f),
                 Value2 = Point(b, 1f),
-                Additive = true,
+                Additive = true
             };
 
             var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref m, default);
@@ -125,7 +124,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 Weight = weight,
                 AngleLimits = new float2(-1f, 1f),
                 SourceMode = PointSourceMode.StaticWorld,
-                StaticOrOffsetPoint = lookPoint,
+                StaticOrOffsetPoint = lookPoint
             };
         }
 
@@ -228,7 +227,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 Weight = 1f,
                 AngleLimits = new float2(-45f, 45f),
                 SourceMode = PointSourceMode.StaticWorld,
-                StaticOrOffsetPoint = lookPoint,
+                StaticOrOffsetPoint = lookPoint
             });
 
             system.Update(WorldUnmanaged);
@@ -270,7 +269,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 Weight = 1f,
                 AngleLimits = new float2(-30f, 30f),
                 SourceMode = PointSourceMode.OwnerOffset,
-                StaticOrOffsetPoint = ownerOffset,
+                StaticOrOffsetPoint = ownerOffset
             });
 
             system.Update(WorldUnmanaged);
@@ -305,7 +304,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             {
                 Weight = 0.5f,
                 SourceMode = PointSourceMode.StaticWorld,
-                StaticOrOffsetPoint = lookPoint,
+                StaticOrOffsetPoint = lookPoint
             });
             Manager.AddComponentData(clip, new ClipWeight { Value = 1f });
 

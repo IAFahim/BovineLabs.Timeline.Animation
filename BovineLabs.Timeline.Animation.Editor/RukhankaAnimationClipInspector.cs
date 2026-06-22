@@ -43,28 +43,20 @@ namespace BovineLabs.Timeline.Animation.Editor
 
             serializedObject.ApplyModifiedProperties();
 
-            if (animationClipChanged)
-            {
-                MatchSelectedClips(true);
-            }
+            if (animationClipChanged) MatchSelectedClips(true);
 
             EditorGUILayout.Space();
 
             using (new EditorGUI.DisabledScope(targets.Length == 0))
             {
-                if (GUILayout.Button("Match Timeline Clip Length"))
-                {
-                    MatchSelectedClips(true);
-                }
+                if (GUILayout.Button("Match Timeline Clip Length")) MatchSelectedClips(true);
             }
         }
 
         private void MatchSelectedClips(bool resetPlayback)
         {
             for (var i = 0; i < targets.Length; i++)
-            {
                 RukhankaAnimationClipTimeline.MatchSelected(targets[i], resetPlayback);
-            }
         }
     }
 }

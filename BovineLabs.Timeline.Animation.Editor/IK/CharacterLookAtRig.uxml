@@ -1,29 +1,37 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
     <ui:VisualElement name="root" class="lookat-root">
-        <ui:Label text="Bones" class="lookat-header" />
-        <uie:PropertyField name="neckBone" binding-path="neckBone" label="Neck Bone" />
-        <uie:PropertyField name="headBone" binding-path="headBone" label="Head Bone" />
-        <ui:Slider name="neckWeight" binding-path="neckWeight" label="Neck Weight" low-value="0" high-value="1" show-input-field="true" />
-        <ui:Slider name="headWeight" binding-path="headWeight" label="Head Weight" low-value="0" high-value="1" show-input-field="true" />
-        <ui:Button name="autoDetectButton" text="Auto-Detect Neck/Head" />
+        <ui:Label text="Bones" class="lookat-header"/>
+        <uie:PropertyField name="neckBone" binding-path="neckBone" label="Neck Bone"/>
+        <uie:PropertyField name="headBone" binding-path="headBone" label="Head Bone"/>
+        <ui:Slider name="neckWeight" binding-path="neckWeight" label="Neck Weight" low-value="0" high-value="1"
+                   show-input-field="true"/>
+        <ui:Slider name="headWeight" binding-path="headWeight" label="Head Weight" low-value="0" high-value="1"
+                   show-input-field="true"/>
+        <ui:Button name="autoDetectButton" text="Auto-Detect Neck/Head"/>
 
-        <ui:Label text="Aim" class="lookat-header" />
-        <uie:PropertyField name="forwardVector" binding-path="forwardVector" label="Forward Vector" />
-        <ui:Slider name="minAngleSlider" binding-path="angleLimitMin" label="Min Angle" low-value="-180" high-value="180" show-input-field="true" />
-        <ui:Slider name="maxAngleSlider" binding-path="angleLimitMax" label="Max Angle" low-value="-180" high-value="180" show-input-field="true" />
+        <ui:Label text="Aim" class="lookat-header"/>
+        <uie:PropertyField name="forwardVector" binding-path="forwardVector" label="Forward Vector"/>
+        <ui:Slider name="minAngleSlider" binding-path="angleLimitMin" label="Min Angle" low-value="-180"
+                   high-value="180" show-input-field="true"/>
+        <ui:Slider name="maxAngleSlider" binding-path="angleLimitMax" label="Max Angle" low-value="-180"
+                   high-value="180" show-input-field="true"/>
 
-        <ui:Label text="Target" class="lookat-header" />
-        <uie:PropertyField name="lookAtTarget" binding-path="lookAtTarget" label="Look At Target" />
-        <ui:Toggle name="createTargetToggle" label="Create target if missing on Build" value="true" />
+        <ui:Label text="Target" class="lookat-header"/>
+        <uie:PropertyField name="lookAtTarget" binding-path="lookAtTarget" label="Look At Target"/>
+        <ui:Toggle name="createTargetToggle" label="Create target if missing on Build" value="true"/>
 
-        <ui:Label text="Setup" class="lookat-header" />
-        <ui:Button name="buildButton" text="Build Look-At Rig" />
+        <ui:Label text="Setup" class="lookat-header"/>
+        <ui:Button name="buildButton" text="Build Look-At Rig"/>
 
         <ui:VisualElement name="validation">
-            <ui:HelpBox name="noAnimator" message-type="Error" text="No Humanoid Animator found on this object or its parents." />
-            <ui:HelpBox name="bonesUnset" message-type="Warning" text="Neck and/or Head bone is not assigned. Use Auto-Detect or assign manually." />
-            <ui:HelpBox name="forwardNotUnit" message-type="Warning" text="Forward Vector is not unit length. Aim direction may be scaled or unstable." />
-            <ui:HelpBox name="targetUnset" message-type="Warning" text="Look At Target is unset. Build can create one for you, or assign a Transform." />
+            <ui:HelpBox name="noAnimator" message-type="Error"
+                        text="No Humanoid Animator found on this object or its parents."/>
+            <ui:HelpBox name="bonesUnset" message-type="Warning"
+                        text="Neck and/or Head bone is not assigned. Use Auto-Detect or assign manually."/>
+            <ui:HelpBox name="forwardNotUnit" message-type="Warning"
+                        text="Forward Vector is not unit length. Aim direction may be scaled or unstable."/>
+            <ui:HelpBox name="targetUnset" message-type="Warning"
+                        text="Look At Target is unset. Build can create one for you, or assign a Transform."/>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

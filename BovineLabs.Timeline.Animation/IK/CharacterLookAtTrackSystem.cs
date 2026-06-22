@@ -78,10 +78,6 @@ namespace BovineLabs.Timeline.Animation
 
             var blendData = _blendImpl.Update(ref state);
 
-            // RelaxJob and WriteLookAtJob both read-modify-write AimIKLookup (and WriteLookAtJob also
-            // LocalTransformLookup) through NativeDisableParallelForRestriction lookups. Two source entities can
-            // legitimately resolve to the same AimIKEntity/TargetEntity, which would be a silent parallel-write
-            // data race. Run both single-threaded so colliding keys are resolved deterministically.
             state.Dependency = new RelaxJob
             {
                 DeltaTime = SystemAPI.Time.DeltaTime,
@@ -187,11 +183,6 @@ namespace BovineLabs.Timeline.Animation
             {
                 if (!LookAtTargetLookup.TryGetComponent(entity, out var lookAtTarget)) return;
 
-                // Capture the dominant clip's authored angle limits before blending. AccumulateWeighted always
-                // stores the highest-weight clip in Value1, so Value1.AngleLimits is the authored aim cone.
-                // JobHelpers.Blend would otherwise lerp AngleLimits toward the zero-pollution default's (0,0),
-                // collapsing the cone during fade in/out. Angle limits are a configuration cone, not a value to
-                // spatially interpolate toward the origin.
                 var angleLimits = mixData.Value1.AngleLimits;
 
                 var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref mixData, default);

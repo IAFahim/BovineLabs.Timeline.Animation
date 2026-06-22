@@ -1,24 +1,28 @@
 <ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="True">
     <ui:VisualElement name="root" class="lookat-root">
-        <ui:Label text="Source" class="lookat-header" />
-        <uie:PropertyField name="sourceMode" binding-path="sourceMode" label="Source Mode" />
+        <ui:Label text="Source" class="lookat-header"/>
+        <uie:PropertyField name="sourceMode" binding-path="sourceMode" label="Source Mode"/>
         <ui:VisualElement name="linkedGroup">
-            <uie:PropertyField name="readRootFrom" binding-path="readRootFrom" label="Read Root From" />
-            <uie:PropertyField name="lookTargetLink" binding-path="lookTargetLink" label="Look Target Link" />
-            <ui:HelpBox name="linkWarning" message-type="Warning" text="Linked Target mode needs a Look Target Link. Assign an EntityLinkSchema or change the source mode." />
+            <uie:PropertyField name="readRootFrom" binding-path="readRootFrom" label="Read Root From"/>
+            <uie:PropertyField name="lookTargetLink" binding-path="lookTargetLink" label="Look Target Link"/>
+            <ui:HelpBox name="linkWarning" message-type="Warning"
+                        text="Linked Target mode needs a Look Target Link. Assign an EntityLinkSchema or change the source mode."/>
         </ui:VisualElement>
         <ui:VisualElement name="staticGroup">
-            <uie:PropertyField name="staticWorldPoint" binding-path="staticWorldPoint" label="Static World Point" />
+            <uie:PropertyField name="staticWorldPoint" binding-path="staticWorldPoint" label="Static World Point"/>
         </ui:VisualElement>
         <ui:VisualElement name="offsetGroup">
-            <uie:PropertyField name="ownerLocalOffset" binding-path="ownerLocalOffset" label="Owner Local Offset" />
+            <uie:PropertyField name="ownerLocalOffset" binding-path="ownerLocalOffset" label="Owner Local Offset"/>
         </ui:VisualElement>
 
-        <ui:Label text="Influence" class="lookat-header" />
-        <ui:Slider name="weight" binding-path="weight" label="Weight" low-value="0" high-value="1" show-input-field="true" />
+        <ui:Label text="Influence" class="lookat-header"/>
+        <ui:Slider name="weight" binding-path="weight" label="Weight" low-value="0" high-value="1"
+                   show-input-field="true"/>
 
-        <ui:Label text="Angle Limits (degrees)" class="lookat-header" />
-        <ui:Slider name="minAngleSlider" binding-path="angleLimitMin" label="Min Angle" low-value="-180" high-value="180" show-input-field="true" />
-        <ui:Slider name="maxAngleSlider" binding-path="angleLimitMax" label="Max Angle" low-value="-180" high-value="180" show-input-field="true" />
+        <ui:Label text="Angle Limits (degrees)" class="lookat-header"/>
+        <ui:Slider name="minAngleSlider" binding-path="angleLimitMin" label="Min Angle" low-value="-180"
+                   high-value="180" show-input-field="true"/>
+        <ui:Slider name="maxAngleSlider" binding-path="angleLimitMax" label="Max Angle" low-value="-180"
+                   high-value="180" show-input-field="true"/>
     </ui:VisualElement>
 </ui:UXML>

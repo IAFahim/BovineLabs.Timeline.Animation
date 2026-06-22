@@ -67,8 +67,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
                 builder.ApplyTo(ref commands);
 
-                // DefaultBlendGroupFallback is the immutable reset target — blob-backed so actors
-                // with an identical default fallback dedupe to one blob (AddBlobAsset content hash).
                 var defaultFallback = builder.BuildFallbackBlend();
                 var blobBuilder = new BlobBuilder(Allocator.Temp);
                 blobBuilder.ConstructRoot<FallbackBlend>() = defaultFallback;
@@ -81,12 +79,13 @@ namespace BovineLabs.Timeline.Animation.Authoring
             private (Hash128 hash, BlobAssetReference<AnimationClipBlob> blob) BakeFallbackAnimation(
                 TimelineAnimationStateAuthoring authoring, Avatar avatar, Entity entity)
             {
-                // Foot-IK variant must match between the referenced hash and the baked blob (see ComputeAnimationHash overload).
-                var fallbackHash = BakingUtils.ComputeAnimationHash(authoring.fallbackAnimationClip, avatar, authoring.applyFootIK);
+                var fallbackHash =
+                    BakingUtils.ComputeAnimationHash(authoring.fallbackAnimationClip, avatar, authoring.applyFootIK);
                 var animationBaker = new AnimationClipBaker();
                 singleClipBuffer[0] = authoring.fallbackAnimationClip;
                 var bakedAnimations =
-                    animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject, authoring.applyFootIK);
+                    animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject,
+                        authoring.applyFootIK);
                 singleClipBuffer[0] = null;
 
                 BlobAssetReference<AnimationClipBlob> fallbackBlob = default;

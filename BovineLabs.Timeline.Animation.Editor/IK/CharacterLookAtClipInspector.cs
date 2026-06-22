@@ -8,8 +8,11 @@ namespace BovineLabs.Timeline.Animation.Editor
     [CustomEditor(typeof(CharacterLookAtClip))]
     public class CharacterLookAtClipInspector : UnityEditor.Editor
     {
-        private const string UxmlPath = "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAtClip.uxml";
-        private const string UssPath = "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAt.uss";
+        private const string UxmlPath =
+            "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAtClip.uxml";
+
+        private const string UssPath =
+            "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAt.uss";
 
         public override VisualElement CreateInspectorGUI()
         {
@@ -25,10 +28,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             tree.CloneTree(root);
 
             var style = AssetDatabase.LoadAssetAtPath<StyleSheet>(UssPath);
-            if (style != null)
-            {
-                root.styleSheets.Add(style);
-            }
+            if (style != null) root.styleSheets.Add(style);
 
             var sourceModeField = root.Q<PropertyField>("sourceMode");
             var linkedGroup = root.Q<VisualElement>("linkedGroup");
@@ -41,10 +41,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             void RefreshVisibility()
             {
                 var clip = target as CharacterLookAtClip;
-                if (clip == null)
-                {
-                    return;
-                }
+                if (clip == null) return;
 
                 SetVisible(linkedGroup, clip.sourceMode == PointSourceMode.LinkedTarget);
                 SetVisible(staticGroup, clip.sourceMode == PointSourceMode.StaticWorld);
@@ -61,18 +58,12 @@ namespace BovineLabs.Timeline.Animation.Editor
             {
                 minSlider.RegisterValueChangedCallback(evt =>
                 {
-                    if (evt.newValue > maxSlider.value)
-                    {
-                        maxSlider.value = evt.newValue;
-                    }
+                    if (evt.newValue > maxSlider.value) maxSlider.value = evt.newValue;
                 });
 
                 maxSlider.RegisterValueChangedCallback(evt =>
                 {
-                    if (evt.newValue < minSlider.value)
-                    {
-                        minSlider.value = evt.newValue;
-                    }
+                    if (evt.newValue < minSlider.value) minSlider.value = evt.newValue;
                 });
             }
 
@@ -83,10 +74,7 @@ namespace BovineLabs.Timeline.Animation.Editor
 
         private static void SetVisible(VisualElement element, bool visible)
         {
-            if (element == null)
-            {
-                return;
-            }
+            if (element == null) return;
 
             element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
         }

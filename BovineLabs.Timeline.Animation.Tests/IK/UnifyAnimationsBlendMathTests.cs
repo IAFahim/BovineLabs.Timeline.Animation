@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using Unity.Collections;
+using Unity.Entities;
 using Unity.Mathematics;
 using Hash128 = Unity.Entities.Hash128;
 
@@ -141,12 +142,24 @@ namespace BovineLabs.Timeline.Animation.Tests
             var layers = new NativeArray<int>(6, Allocator.Temp);
             var isOverride = new NativeArray<bool>(6, Allocator.Temp);
 
-            weights[0] = 0.1f; layers[0] = 0; isOverride[0] = true;
-            weights[1] = 0.2f; layers[1] = 1; isOverride[1] = true;
-            weights[2] = 0.3f; layers[2] = 0; isOverride[2] = true;
-            weights[3] = 0.4f; layers[3] = 0; isOverride[3] = false;
-            weights[4] = 0.5f; layers[4] = 1; isOverride[4] = true;
-            weights[5] = 0.6f; layers[5] = 0; isOverride[5] = true;
+            weights[0] = 0.1f;
+            layers[0] = 0;
+            isOverride[0] = true;
+            weights[1] = 0.2f;
+            layers[1] = 1;
+            isOverride[1] = true;
+            weights[2] = 0.3f;
+            layers[2] = 0;
+            isOverride[2] = true;
+            weights[3] = 0.4f;
+            layers[3] = 0;
+            isOverride[3] = false;
+            weights[4] = 0.5f;
+            layers[4] = 1;
+            isOverride[4] = true;
+            weights[5] = 0.6f;
+            layers[5] = 0;
+            isOverride[5] = true;
 
             for (var layer = 0; layer < 2; layer++)
             {
@@ -176,7 +189,7 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             for (var i = 0; i < 4096; i++)
             {
-                var track = new Unity.Entities.Entity { Index = i, Version = (i * 7) + 1 };
+                var track = new Entity { Index = i, Version = i * 7 + 1 };
                 var clipHash = new Hash128((uint)i, (uint)(i * 3), (uint)(i * 5), (uint)(i * 11));
                 var id = MotionId.Compute(track, i & 3, clipHash);
                 Assert.AreNotEqual(MotionId.Fallback, id,
@@ -187,7 +200,7 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void Compute_IsDeterministic()
         {
-            var track = new Unity.Entities.Entity { Index = 12, Version = 3 };
+            var track = new Entity { Index = 12, Version = 3 };
             var clipHash = new Hash128(1u, 2u, 3u, 4u);
             Assert.AreEqual(
                 MotionId.Compute(track, 1, clipHash),
@@ -209,18 +222,11 @@ namespace BovineLabs.Timeline.Animation.Tests
         }
     }
 
-    /// <summary>
-    ///     Regression coverage for the fallback-clock scrub guard (finding C3 / F1).
-    ///     Mirrors <c>UnifyAnimationsJob.EmitFallback</c>: the fallback accumulated time must
-    ///     advance by DeltaTime during normal playback but freeze while scrubbing, matching the
-    ///     other time integrators (IntegrateWeights / IntegrateBaseLayerControl) in the same job.
-    /// </summary>
     [TestFixture]
     public class FallbackScrubAdvanceTests
     {
         private const float MinDuration = 0.001f;
 
-        /// <summary>Mirror of the production advance step in <c>EmitFallback</c>.</summary>
         private static float IntegrateFallback(
             float accumulated,
             FallbackPlaybackMode mode,
@@ -247,7 +253,7 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void Loop_DoesNotAdvance_WhileScrubbing()
         {
-            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 1f, 0.5f, isScrubbing: true);
+            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 1f, 0.5f, true);
             Assert.AreEqual(0.25f, advanced, 1e-6f,
                 "while scrubbing the fallback clock must not free-run by DeltaTime");
         }
@@ -255,24 +261,24 @@ namespace BovineLabs.Timeline.Animation.Tests
         [Test]
         public void Loop_AdvancesByDeltaOverDuration_WhilePlaying()
         {
-            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 2f, 0.5f, isScrubbing: false);
-            Assert.AreEqual(0.25f + (0.5f / 2f), advanced, 1e-6f);
+            var advanced = IntegrateFallback(0.25f, FallbackPlaybackMode.Loop, 2f, 0.5f, false);
+            Assert.AreEqual(0.25f + 0.5f / 2f, advanced, 1e-6f);
         }
 
         [Test]
         public void Hold_DoesNotAdvance_WhileScrubbing()
         {
-            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.5f, isScrubbing: true);
+            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.5f, true);
             Assert.AreEqual(0.5f, advanced, 1e-6f);
         }
 
         [Test]
         public void Hold_AdvancesWhilePlaying_ThenLatchesAtOne()
         {
-            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.25f, isScrubbing: false);
+            var advanced = IntegrateFallback(0.5f, FallbackPlaybackMode.Hold, 1f, 0.25f, false);
             Assert.AreEqual(0.75f, advanced, 1e-6f);
 
-            var latched = IntegrateFallback(1f, FallbackPlaybackMode.Hold, 1f, 0.25f, isScrubbing: false);
+            var latched = IntegrateFallback(1f, FallbackPlaybackMode.Hold, 1f, 0.25f, false);
             Assert.AreEqual(1f, latched, 1e-6f, "Hold mode must not advance past 1");
         }
 
@@ -281,7 +287,7 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             var accumulated = 0.4f;
             for (var i = 0; i < 10; i++)
-                accumulated = IntegrateFallback(accumulated, FallbackPlaybackMode.Loop, 1f, 0.5f, isScrubbing: true);
+                accumulated = IntegrateFallback(accumulated, FallbackPlaybackMode.Loop, 1f, 0.5f, true);
 
             Assert.AreEqual(0.4f, accumulated, 1e-6f,
                 "repeated scrub frames must leave the fallback clock untouched");

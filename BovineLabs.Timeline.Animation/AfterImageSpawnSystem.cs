@@ -3,6 +3,7 @@ using Rukhanka;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Transforms;
+using UnityEngine;
 
 namespace BovineLabs.Timeline.Animation
 {
@@ -22,11 +23,6 @@ namespace BovineLabs.Timeline.Animation
             public int AtpCount;
         }
 
-        // Cleanup tag stamped onto every spawned ghost recording the clip entity that owns it.
-        // ICleanupComponentData survives the ghost's own destruction, but its purpose here is to let
-        // ReconcileOrphanedGhosts find and reclaim ghosts whose owning clip was destroyed while the clip
-        // was still ClipActive (timeline/SubScene teardown, director destroyed, archetype change), a path
-        // ResetInactiveClips can never observe because the clip entity no longer exists.
         private struct AfterImageGhostOwner : ICleanupComponentData
         {
             public Entity ClipEntity;
@@ -111,7 +107,7 @@ namespace BovineLabs.Timeline.Animation
 #if UNITY_EDITOR
                 else if (req.AtpCount > 0)
                 {
-                    UnityEngine.Debug.LogWarning(
+                    Debug.LogWarning(
                         "[AfterImage] Ghost prefab is missing an AnimationToProcessComponent buffer; the captured " +
                         "pose was dropped and the ghost will render in bind pose. Give the ghost prefab a rig setup.");
                 }
@@ -141,9 +137,6 @@ namespace BovineLabs.Timeline.Animation
 
                 if (state.EntityManager.Exists(spawnedEntity))
                 {
-                    // Remove the cleanup tag first so DestroyEntity fully reclaims the ghost rather than
-                    // leaving a husk (ICleanupComponentData keeps an entity alive until its cleanup
-                    // components are stripped).
                     ecb.RemoveComponent<AfterImageGhostOwner>(spawnedEntity);
                     ecb.DestroyEntity(spawnedEntity);
                 }
@@ -152,9 +145,6 @@ namespace BovineLabs.Timeline.Animation
             }
         }
 
-        // Reclaim ghosts whose owning clip entity was destroyed while still ClipActive (timeline/SubScene
-        // teardown, director destroyed, archetype change). ResetInactiveClips cannot see those clips - they
-        // no longer exist - so without this pass each such teardown would leak one orphan ghost forever.
         private void ReconcileOrphanedGhosts(ref SystemState state, EntityCommandBuffer ecb)
         {
             foreach (var (owner, entity) in
@@ -163,16 +153,11 @@ namespace BovineLabs.Timeline.Animation
             {
                 var clipEntity = owner.ValueRO.ClipEntity;
 
-                // The owner clip is still alive and still points at this ghost: leave it to the normal
-                // active/inactive lifecycle (CollectAndSpawn / ResetInactiveClips).
                 if (state.EntityManager.Exists(clipEntity) &&
                     SystemAPI.HasComponent<AfterImageClipData>(clipEntity) &&
                     SystemAPI.GetComponent<AfterImageClipData>(clipEntity).SpawnedEntity == entity)
-                {
                     continue;
-                }
 
-                // Orphaned: owner clip gone (or no longer references this ghost). Reclaim it.
                 ecb.RemoveComponent<AfterImageGhostOwner>(entity);
                 ecb.DestroyEntity(entity);
             }

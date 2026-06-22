@@ -22,10 +22,7 @@ namespace BovineLabs.Timeline.Animation.Editor
 
         private static void OnEditorUpdate()
         {
-            if (Application.isPlaying || EditorApplication.isCompiling)
-            {
-                return;
-            }
+            if (Application.isPlaying || EditorApplication.isCompiling) return;
 
             var director = TimelineEditor.inspectedDirector;
 
@@ -42,27 +39,18 @@ namespace BovineLabs.Timeline.Animation.Editor
                 s_LastTime = -1d;
             }
 
-            if (!director.playableGraph.IsValid())
-            {
-                return;
-            }
+            if (!director.playableGraph.IsValid()) return;
 
             var time = director.time;
 
-            if (Math.Abs(time - s_LastTime) < 0.0001d)
-            {
-                return;
-            }
+            if (Math.Abs(time - s_LastTime) < 0.0001d) return;
 
             s_LastTime = time;
             director.playableGraph.Evaluate();
 
             foreach (var world in World.All)
             {
-                if ((world.Flags & WorldFlags.Editor) != WorldFlags.Editor)
-                {
-                    continue;
-                }
+                if ((world.Flags & WorldFlags.Editor) != WorldFlags.Editor) continue;
 
                 world.Update();
                 break;

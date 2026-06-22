@@ -147,12 +147,6 @@ namespace BovineLabs.Timeline.Animation
                 float blendInSpeed,
                 float blendOutSpeed)
             {
-                //	Slew-rate limiter, NOT an exponential. CurrentWeight tracks the timeline clip's OWN eased
-                //	weight (TargetWeight already carries the clip's ease-in/out — its S/F) exactly whenever that
-                //	ease is gentler than the floor, and only rate-limits a HARD CUT (a clip authored with no
-                //	ease) so it doesn't pop. Linear => it actually COMPLETES (the old exp() never reached the
-                //	target and broke short clips). The floor duration is clamped to half the clip length, so a
-                //	short clip can never be over-blended / stuck below full weight.
                 var blendInDur = blendInSpeed <= WeightEpsilon ? 0f : 1f / blendInSpeed;
                 var blendOutDur = blendOutSpeed <= WeightEpsilon ? 0f : 1f / blendOutSpeed;
 
@@ -200,10 +194,6 @@ namespace BovineLabs.Timeline.Animation
                 float blendInSpeed,
                 float blendOutSpeed)
             {
-                //	Fallback is the pure complement of the base-layer clips' OWN (eased) weights, so it follows
-                //	each clip's authored ease (S/F) at any length — no fixed-duration re-ramp on top. Summed then
-                //	saturated so a base->base crossfade stays fully covered (Idle never bleeds through the middle
-                //	of a transition); a lone clip easing in/out lets the fallback fill exactly its complement.
                 var baseSum = 0f;
                 for (var i = 0; i < smoothEntries.Length; i++)
                 {
@@ -276,7 +266,8 @@ namespace BovineLabs.Timeline.Animation
                 });
             }
 
-            private static FixedList512Bytes<float> AccumulateOverrideSums(in DynamicBuffer<SmoothBlendGroupEntry> entries)
+            private static FixedList512Bytes<float> AccumulateOverrideSums(
+                in DynamicBuffer<SmoothBlendGroupEntry> entries)
             {
                 var sums = default(FixedList512Bytes<float>);
                 sums.Length = LayerSumCapacity;

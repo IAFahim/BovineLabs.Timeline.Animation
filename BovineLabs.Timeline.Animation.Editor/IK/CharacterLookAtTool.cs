@@ -16,21 +16,14 @@ namespace BovineLabs.Timeline.Animation.Editor
         public override void OnToolGUI(EditorWindow window)
         {
             foreach (var obj in targets)
-            {
                 if (obj is CharacterLookAtRigAuthoring rig && rig != null)
-                {
                     DrawRig(rig);
-                }
-            }
         }
 
         private static void DrawRig(CharacterLookAtRigAuthoring rig)
         {
             var head = rig.headBone;
-            if (head == null)
-            {
-                return;
-            }
+            if (head == null) return;
 
             var origin = head.position;
             var forward = rig.forwardVector.sqrMagnitude > 1e-6f
@@ -53,10 +46,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             const float radius = 1.5f;
 
             var right = Vector3.Cross(up, forward);
-            if (right.sqrMagnitude < 1e-6f)
-            {
-                right = Vector3.Cross(Vector3.up, forward);
-            }
+            if (right.sqrMagnitude < 1e-6f) right = Vector3.Cross(Vector3.up, forward);
 
             var fromDir = Quaternion.AngleAxis(min, up) * forward;
             var span = max - min;
@@ -69,17 +59,14 @@ namespace BovineLabs.Timeline.Animation.Editor
 
             var minDir = Quaternion.AngleAxis(min, up) * forward;
             var maxDir = Quaternion.AngleAxis(max, up) * forward;
-            Handles.DrawLine(origin, origin + (minDir * radius));
-            Handles.DrawLine(origin, origin + (maxDir * radius));
+            Handles.DrawLine(origin, origin + minDir * radius);
+            Handles.DrawLine(origin, origin + maxDir * radius);
         }
 
         private static void DrawTargetLink(CharacterLookAtRigAuthoring rig, Vector3 origin, Vector3 forward)
         {
             var toTarget = rig.lookAtTarget.position - origin;
-            if (toTarget.sqrMagnitude < 1e-6f)
-            {
-                return;
-            }
+            if (toTarget.sqrMagnitude < 1e-6f) return;
 
             var halfAngle = Mathf.Max(Mathf.Abs(rig.angleLimitMin), Mathf.Abs(rig.angleLimitMax));
             var angle = Vector3.Angle(forward, toTarget.normalized);

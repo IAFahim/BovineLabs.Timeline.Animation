@@ -10,8 +10,11 @@ namespace BovineLabs.Timeline.Animation.Editor
     [CustomEditor(typeof(CharacterLookAtRigAuthoring))]
     public class CharacterLookAtRigInspector : UnityEditor.Editor
     {
-        private const string UxmlPath = "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAtRig.uxml";
-        private const string UssPath = "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAt.uss";
+        private const string UxmlPath =
+            "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAtRig.uxml";
+
+        private const string UssPath =
+            "Packages/com.bovinelabs.timeline.animation/BovineLabs.Timeline.Animation.Editor/IK/CharacterLookAt.uss";
 
         public override VisualElement CreateInspectorGUI()
         {
@@ -27,26 +30,17 @@ namespace BovineLabs.Timeline.Animation.Editor
             tree.CloneTree(root);
 
             var style = AssetDatabase.LoadAssetAtPath<StyleSheet>(UssPath);
-            if (style != null)
-            {
-                root.styleSheets.Add(style);
-            }
+            if (style != null) root.styleSheets.Add(style);
 
             BindAngleClamp(root);
 
             var createTargetToggle = root.Q<Toggle>("createTargetToggle");
 
             var autoDetect = root.Q<Button>("autoDetectButton");
-            if (autoDetect != null)
-            {
-                autoDetect.clicked += AutoDetectBones;
-            }
+            if (autoDetect != null) autoDetect.clicked += AutoDetectBones;
 
             var build = root.Q<Button>("buildButton");
-            if (build != null)
-            {
-                build.clicked += () => BuildRig(createTargetToggle is { value: true });
-            }
+            if (build != null) build.clicked += () => BuildRig(createTargetToggle is { value: true });
 
             root.schedule.Execute(() => RefreshValidation(root)).Every(250);
 
@@ -57,35 +51,23 @@ namespace BovineLabs.Timeline.Animation.Editor
         {
             var minSlider = root.Q<Slider>("minAngleSlider");
             var maxSlider = root.Q<Slider>("maxAngleSlider");
-            if (minSlider == null || maxSlider == null)
-            {
-                return;
-            }
+            if (minSlider == null || maxSlider == null) return;
 
             minSlider.RegisterValueChangedCallback(evt =>
             {
-                if (evt.newValue > maxSlider.value)
-                {
-                    maxSlider.value = evt.newValue;
-                }
+                if (evt.newValue > maxSlider.value) maxSlider.value = evt.newValue;
             });
 
             maxSlider.RegisterValueChangedCallback(evt =>
             {
-                if (evt.newValue < minSlider.value)
-                {
-                    minSlider.value = evt.newValue;
-                }
+                if (evt.newValue < minSlider.value) minSlider.value = evt.newValue;
             });
         }
 
         private void RefreshValidation(VisualElement root)
         {
             var rig = target as CharacterLookAtRigAuthoring;
-            if (rig == null)
-            {
-                return;
-            }
+            if (rig == null) return;
 
             var animator = ResolveHumanoidAnimator(rig);
 
@@ -98,10 +80,7 @@ namespace BovineLabs.Timeline.Animation.Editor
         private void AutoDetectBones()
         {
             var rig = target as CharacterLookAtRigAuthoring;
-            if (rig == null)
-            {
-                return;
-            }
+            if (rig == null) return;
 
             var animator = ResolveHumanoidAnimator(rig);
             if (animator == null)
@@ -119,10 +98,7 @@ namespace BovineLabs.Timeline.Animation.Editor
         private void BuildRig(bool createTargetIfMissing)
         {
             var rig = target as CharacterLookAtRigAuthoring;
-            if (rig == null)
-            {
-                return;
-            }
+            if (rig == null) return;
 
             if (rig.headBone == null)
             {
@@ -150,10 +126,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             }
 
             var aimIK = rig.headBone.GetComponent<AimIKAuthoring>();
-            if (aimIK == null)
-            {
-                aimIK = Undo.AddComponent<AimIKAuthoring>(rig.headBone.gameObject);
-            }
+            if (aimIK == null) aimIK = Undo.AddComponent<AimIKAuthoring>(rig.headBone.gameObject);
 
             Undo.RecordObject(aimIK, "Configure Aim IK");
             aimIK.target = rig.lookAtTarget;
@@ -162,10 +135,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             aimIK.angleLimitMax = rig.angleLimitMax;
 
             var bones = new List<WeightedTransform>();
-            if (rig.neckBone != null)
-            {
-                bones.Add(new WeightedTransform { bone = rig.neckBone, weight = rig.neckWeight });
-            }
+            if (rig.neckBone != null) bones.Add(new WeightedTransform { bone = rig.neckBone, weight = rig.neckWeight });
 
             bones.Add(new WeightedTransform { bone = rig.headBone, weight = rig.headWeight });
             aimIK.affectedBones = bones.ToArray();
@@ -178,10 +148,7 @@ namespace BovineLabs.Timeline.Animation.Editor
         private static Animator ResolveHumanoidAnimator(CharacterLookAtRigAuthoring rig)
         {
             var animator = rig.GetComponentInParent<Animator>();
-            if (animator == null || !animator.isHuman)
-            {
-                return null;
-            }
+            if (animator == null || !animator.isHuman) return null;
 
             return animator;
         }
@@ -193,10 +160,7 @@ namespace BovineLabs.Timeline.Animation.Editor
 
         private static void SetVisible(VisualElement element, bool visible)
         {
-            if (element == null)
-            {
-                return;
-            }
+            if (element == null) return;
 
             element.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
         }
