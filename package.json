@@ -24,5 +24,17 @@
   ],
   "documentationUrl": "Documentation~/com.bovinelabs.timeline.animation.md",
   "changelogUrl": "CHANGELOG.md",
-  "licensesUrl": "LICENSE.md"
+  "licensesUrl": "LICENSE.md",
+  "samples": [
+    {
+      "displayName": "Animation Showcase",
+      "description": "DOTS animation timeline showcase: Rukhanka single-clip, BlendTree2D, AfterImage, WeaponAnchor and CharacterLookAt tracks on real rigs.",
+      "path": "Sample~/Animation Showcase"
+    },
+    {
+      "displayName": "Look At Validation",
+      "description": "CharacterLookAt (AimIK) rig validation: a Rukhanka-rigged humanoid driven by a LookAt timeline track.",
+      "path": "Sample~/LookAt Validation"
+    }
+  ]
 }
