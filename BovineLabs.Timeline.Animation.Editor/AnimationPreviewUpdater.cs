@@ -18,6 +18,8 @@ namespace BovineLabs.Timeline.Animation.Editor
         static AnimationPreviewUpdater()
         {
             EditorApplication.update += OnEditorUpdate;
+            // ponytail: CoreCLR/no-domain-reload — drop this sub before the assembly unloads or it accumulates per recompile. Upgrade path: [OnCodeUnloading].
+            AssemblyReloadEvents.beforeAssemblyReload += () => EditorApplication.update -= OnEditorUpdate;
         }
 
         private static void OnEditorUpdate()
