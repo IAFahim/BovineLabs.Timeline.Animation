@@ -2,6 +2,7 @@
 
 using System;
 using Unity.Entities;
+using Unity.Scripting.LifecycleManagement;
 using UnityEditor;
 using UnityEditor.Timeline;
 using UnityEngine;
@@ -10,7 +11,7 @@ using UnityEngine.Playables;
 namespace BovineLabs.Timeline.Animation.Editor
 {
     [InitializeOnLoad]
-    internal static class AnimationPreviewUpdater
+    internal static partial class AnimationPreviewUpdater
     {
         private static PlayableDirector s_Director;
         private static double s_LastTime = -1d;
@@ -18,9 +19,11 @@ namespace BovineLabs.Timeline.Animation.Editor
         static AnimationPreviewUpdater()
         {
             EditorApplication.update += OnEditorUpdate;
-            // ponytail: CoreCLR/no-domain-reload — drop this sub before the assembly unloads or it accumulates per recompile. Upgrade path: [OnCodeUnloading].
-            AssemblyReloadEvents.beforeAssemblyReload += () => EditorApplication.update -= OnEditorUpdate;
         }
+
+        // CoreCLR/no-domain-reload: unsubscribe before this assembly unloads on a code reload, else the sub accumulates per recompile.
+        [OnCodeUnloading]
+        private static void OnCodeUnloading() => EditorApplication.update -= OnEditorUpdate;
 
         private static void OnEditorUpdate()
         {
