@@ -1,3 +1,4 @@
+using BovineLabs.Core;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Reaction.Data.Core;
@@ -22,7 +23,12 @@ namespace BovineLabs.Timeline.Animation
     {
         private const float RelaxRate = 12f;
 
+        // Distance in front of the character used as the fallback gaze point when a linked look-at target cannot be resolved.
+        private const float ForwardFallbackDistance = 5f;
+
         private TrackBlendImpl<CharacterLookAtData, CharacterLookAtAnimated> _blendImpl;
+
+        private NativeReference<bool> _missingRigWarned;
 
         private UnsafeComponentLookup<Targets> _targetsLookup;
         private UnsafeComponentLookup<EntityLinkSource> _sourcesLookup;
@@ -48,12 +54,16 @@ namespace BovineLabs.Timeline.Animation
             _parentLookup = state.GetComponentLookup<Parent>(true);
             _lookAtTargetLookup = state.GetComponentLookup<CharacterLookAtTarget>(true);
             _aimIKLookup = state.GetComponentLookup<AimIKComponent>();
+
+            _missingRigWarned = new NativeReference<bool>(Allocator.Persistent);
         }
 
         [BurstCompile]
         public void OnDestroy(ref SystemState state)
         {
             _blendImpl.OnDestroy(ref state);
+
+            _missingRigWarned.Dispose();
         }
 
         [BurstCompile]
@@ -91,7 +101,9 @@ namespace BovineLabs.Timeline.Animation
                 LocalTransformLookup = _localTransformLookup,
                 ParentLookup = _parentLookup,
                 LtwLookup = _ltwLookup,
-                AimIKLookup = _aimIKLookup
+                AimIKLookup = _aimIKLookup,
+                Logger = SystemAPI.GetSingleton<BLLogger>(),
+                MissingRigWarned = _missingRigWarned
             }.Schedule(state.Dependency);
         }
 
@@ -120,7 +132,17 @@ namespace BovineLabs.Timeline.Animation
                             EntityLinkResolver.TryResolve(bindingEntity, targets, data.ReadRootFrom, data.TargetLinkKey,
                                 Sources, Entries, out var resolved) &&
                             LtwLookup.TryGetComponent(resolved, out var resolvedLtw))
+                        {
                             point = LocalTransform.FromMatrix(resolvedLtw.Value).Position;
+                        }
+                        else if (bindingEntity != Entity.Null && LtwLookup.TryGetComponent(bindingEntity, out var fallbackOwnerLtw))
+                        {
+                            // Unresolved look-at target: gaze along the character's forward direction
+                            // rather than snapping the head to world origin (0,0,0).
+                            point = fallbackOwnerLtw.Position +
+                                    math.normalizesafe(fallbackOwnerLtw.Forward) * ForwardFallbackDistance;
+                        }
+
                         break;
 
                     case PointSourceMode.OwnerOffset:
@@ -169,6 +191,9 @@ namespace BovineLabs.Timeline.Animation
             public ComponentLookup<LocalTransform> LocalTransformLookup;
             public ComponentLookup<AimIKComponent> AimIKLookup;
 
+            public BLLogger Logger;
+            public NativeReference<bool> MissingRigWarned;
+
             public void Execute()
             {
                 var enumerator = BlendData.GetEnumerator();
@@ -181,7 +206,17 @@ namespace BovineLabs.Timeline.Animation
 
             private void Apply(Entity entity, MixData<CharacterLookAtData> mixData)
             {
-                if (!LookAtTargetLookup.TryGetComponent(entity, out var lookAtTarget)) return;
+                if (!LookAtTargetLookup.TryGetComponent(entity, out var lookAtTarget))
+                {
+                    if (!MissingRigWarned.Value)
+                    {
+                        MissingRigWarned.Value = true;
+                        Logger.LogWarning512(
+                            "[CharacterLookAt] A look-at clip is active but the bound character has no CharacterLookAtTarget rig (run Build Look-At Rig on the character). Look-at will be skipped.");
+                    }
+
+                    return;
+                }
 
                 var angleLimits = mixData.Value1.AngleLimits;
 

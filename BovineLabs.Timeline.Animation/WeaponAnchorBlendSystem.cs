@@ -15,6 +15,10 @@ namespace BovineLabs.Timeline.Animation
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct WeaponAnchorBlendSystem : ISystem
     {
+        private const float RelaxRate = 12f;
+        private const float RestPositionEpsilonSq = 1e-8f;
+        private const float RestRotationDot = 0.99999f;
+
         private NativeParallelMultiHashMap<Entity, WeaponAnchorSample> _samples;
         private NativeList<Entity> _weapons;
         private EntityQuery _clipQuery;
@@ -68,6 +72,7 @@ namespace BovineLabs.Timeline.Animation
 
             state.Dependency = new ResolveJob
             {
+                DeltaTime = SystemAPI.Time.DeltaTime,
                 LocalToWorldLookup = state.GetComponentLookup<LocalToWorld>(true),
                 ParentLookup = state.GetComponentLookup<Parent>(true)
             }.ScheduleParallel(state.Dependency);
@@ -142,30 +147,57 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         private partial struct ResolveJob : IJobEntity
         {
+            public float DeltaTime;
+
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
 
             private void Execute(Entity entity, ref DynamicBuffer<WeaponAnchorSample> samples,
-                ref LocalTransform transform)
+                ref LocalTransform transform, ref WeaponAnchorRest rest)
             {
-                if (!AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation))
+                if (AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation))
+                {
+                    // Anchored this frame: snapshot the pre-attach pose on the activation edge, then drive the bone pose.
+                    if (!rest.Captured)
+                    {
+                        rest.Position = transform.Position;
+                        rest.Rotation = transform.Rotation;
+                        rest.Captured = true;
+                    }
+
+                    if (ParentLookup.TryGetComponent(entity, out var parent) &&
+                        LocalToWorldLookup.TryGetComponent(parent.Value, out var parentL2W) &&
+                        TransformConversion.WorldToParentLocal(parentL2W.Value, worldPosition, worldRotation,
+                            out var localPosition, out var localRotation))
+                    {
+                        transform.Position = localPosition;
+                        transform.Rotation = localRotation;
+                    }
+                    else
+                    {
+                        transform.Position = worldPosition;
+                        transform.Rotation = worldRotation;
+                    }
+
+                    samples.Clear();
+                    return;
+                }
+
+                // Deactivated: relax back toward the captured rest pose instead of freezing at the last anchored pose.
+                if (!rest.Captured)
                     return;
 
-                if (ParentLookup.TryGetComponent(entity, out var parent) &&
-                    LocalToWorldLookup.TryGetComponent(parent.Value, out var parentL2W) &&
-                    TransformConversion.WorldToParentLocal(parentL2W.Value, worldPosition, worldRotation,
-                        out var localPosition, out var localRotation))
-                {
-                    transform.Position = localPosition;
-                    transform.Rotation = localRotation;
-                }
-                else
-                {
-                    transform.Position = worldPosition;
-                    transform.Rotation = worldRotation;
-                }
+                var t = 1f - math.exp(-RelaxRate * DeltaTime);
+                transform.Position = math.lerp(transform.Position, rest.Position, t);
+                transform.Rotation = math.slerp(transform.Rotation, rest.Rotation, t);
 
-                samples.Clear();
+                if (math.distancesq(transform.Position, rest.Position) <= RestPositionEpsilonSq &&
+                    math.abs(math.dot(transform.Rotation, rest.Rotation)) >= RestRotationDot)
+                {
+                    transform.Position = rest.Position;
+                    transform.Rotation = rest.Rotation;
+                    rest.Captured = false;
+                }
             }
         }
     }

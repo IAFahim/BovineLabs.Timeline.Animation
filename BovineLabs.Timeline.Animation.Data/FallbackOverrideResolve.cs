@@ -11,6 +11,10 @@ namespace BovineLabs.Timeline.Animation
             if (candidate.LayerIndex != current.LayerIndex)
                 return candidate.LayerIndex > current.LayerIndex;
 
+            // Same layer: the lowest (most-relevant, topmost) track order wins so ties resolve by authored track order, not hash.
+            if (candidate.TrackOrder != current.TrackOrder)
+                return candidate.TrackOrder < current.TrackOrder;
+
             return candidate.FallbackClipHash.CompareTo(current.FallbackClipHash) > 0;
         }
 

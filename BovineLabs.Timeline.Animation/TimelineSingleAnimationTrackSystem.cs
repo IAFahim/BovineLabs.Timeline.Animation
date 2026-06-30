@@ -122,8 +122,8 @@ namespace BovineLabs.Timeline.Animation
                     NormalizedTime = normalizedTime,
                     Weight = weight,
                     AvatarMaskHash = trackData.ApplyAvatarMask ? trackData.AvatarMaskHash : default,
-                    BlendMode = AnimationBlendingMode.Override,
-                    MotionId = MotionId.Compute(clip.Track, trackData.LayerIndex, clipData.ClipHash),
+                    BlendMode = trackData.BlendMode,
+                    MotionId = MotionId.Compute(clip.Track, trackData.LayerIndex, clipData.ClipHash, clipEntity),
 
                     PositionOffset = finalPosOffset,
                     RotationOffset = finalRotOffset,

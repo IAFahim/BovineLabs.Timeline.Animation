@@ -43,13 +43,18 @@ namespace BovineLabs.Timeline.Animation.Editor
             EditorGUILayout.LabelField("Track Offsets", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(m_TrackOffset);
 
-            if (m_TrackOffset.enumValueIndex == (int)TrackOffset.ApplyTransformOffsets)
+            if (m_TrackOffset.enumValueIndex != (int)TrackOffset.ApplyTransformOffsets &&
+                !m_TrackOffset.hasMultipleDifferentValues)
             {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.PropertyField(m_PositionOffset, new GUIContent("Position"));
-                EditorGUILayout.PropertyField(m_EulerAnglesOffset, new GUIContent("Rotation"));
-                EditorGUI.indentLevel--;
+                EditorGUILayout.HelpBox(
+                    "Only 'Apply Transform Offsets' is supported in DOTS; other modes ignore offsets.",
+                    MessageType.Warning);
             }
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(m_PositionOffset, new GUIContent("Position"));
+            EditorGUILayout.PropertyField(m_EulerAnglesOffset, new GUIContent("Rotation"));
+            EditorGUI.indentLevel--;
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Avatar Mask", EditorStyles.boldLabel);

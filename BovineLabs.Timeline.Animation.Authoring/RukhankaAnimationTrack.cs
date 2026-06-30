@@ -6,6 +6,7 @@ using BovineLabs.Timeline.Authoring;
 using Rukhanka;
 using Rukhanka.Hybrid;
 using Unity.Entities;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Playables;
@@ -38,6 +39,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
         [Header("Avatar Mask")] public AvatarMask avatarMask;
 
         public bool applyAvatarMask = true;
+
+        [Header("Blending")]
+        [Tooltip(
+            "How this track's clips combine with the layers below. Override replaces the pose (standard). Additive layers this clip's motion on top of lower layers — use for recoil, breathing, or lean poses authored as additive clips.")]
+        public AnimationBlendingMode BlendMode = AnimationBlendingMode.Override;
 
         [Header("Exit / Fallback Override (Optional)")]
         [Tooltip(
@@ -87,6 +93,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         protected override void Bake(BakingContext context)
         {
+            if (trackOffset != TrackOffset.ApplyTransformOffsets)
+            {
+                Debug.LogWarning(
+                    $"[RukhankaAnimationTrack] '{name}' uses Track Offset mode '{trackOffset}', which is not supported in DOTS — offsets are ignored. Use 'Apply Transform Offsets'.");
+            }
+
             var rigDef = context.Director.ResolveRigDefinition(this);
 
             if (rigDef == null)
@@ -118,7 +130,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 TrackPositionOffset = OffsetPosition,
                 TrackRotationOffset = OffsetRotation,
                 ApplyAvatarMask = applyAvatarMask,
-                AvatarMaskHash = avatarMaskHash
+                AvatarMaskHash = avatarMaskHash,
+                BlendMode = BlendMode
             });
 
             BakeFallbackOverride(baker, trackEntity, avatar, avatarMaskHash);
@@ -139,6 +152,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var e = baker.CreateAdditionalEntity(TransformUsageFlags.None, false, name + "_AnimationAssets");
                 var buffer = baker.AddBuffer<NewBlobAssetDatabaseRecord<AnimationClipBlob>>(e);
 
+                // Rukhanka sources the additive reference pose from each clip's own AnimationClipSettings at bake time,
+                // so honor a per-clip override by temporarily applying it around the bake. Only relevant for Additive
+                // tracks; Override tracks never read additiveReferencePoseFrame, so leave settings untouched there.
+                var refPoseByClip = BuildReferencePoseMap(clipComponents);
+
                 BakeClipVariant(footIkOnClips, true);
                 BakeClipVariant(footIkOffClips, false);
 
@@ -146,15 +164,80 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 {
                     if (clips.Count == 0) return;
 
-                    var baked = new AnimationClipBaker().BakeAnimations(
-                        baker, clips.ToArray(), avatar, rigDef.gameObject, applyFootIK);
-                    buffer.AddValidAnimations(baked);
+                    var restores = ApplyReferencePoseOverrides(clips, refPoseByClip);
+                    try
+                    {
+                        var baked = new AnimationClipBaker().BakeAnimations(
+                            baker, clips.ToArray(), avatar, rigDef.gameObject, applyFootIK);
+                        buffer.AddValidAnimations(baked);
 
-                    if (baked.IsCreated) baked.Dispose();
+                        if (baked.IsCreated) baked.Dispose();
+                    }
+                    finally
+                    {
+                        foreach (var (clip, settings) in restores)
+                            AnimationUtility.SetAnimationClipSettings(clip, settings);
+                    }
                 }
             }
 
             base.Bake(context);
+        }
+
+        // Maps each source AnimationClip to the clip component that wants a custom additive reference pose. Only built
+        // for Additive tracks (Override never reads the reference-pose frame), so Override clips bake unchanged.
+        private Dictionary<AnimationClip, RukhankaAnimationClip> BuildReferencePoseMap(
+            List<RukhankaAnimationClip> clipComponents)
+        {
+            if (BlendMode != AnimationBlendingMode.Additive)
+                return null;
+
+            Dictionary<AnimationClip, RukhankaAnimationClip> map = null;
+
+            foreach (var c in clipComponents)
+            {
+                if (c.additiveReferencePoseClip == null || c.animationClipHolder == null)
+                    continue;
+
+                map ??= new Dictionary<AnimationClip, RukhankaAnimationClip>();
+
+                if (!map.TryAdd(c.animationClipHolder, c))
+                {
+                    Debug.LogWarning(
+                        $"[RukhankaAnimationTrack] '{name}' has multiple clips using animation '{c.animationClipHolder.name}' " +
+                        "with different additive reference poses; only the first is honored (Rukhanka bakes one blob per clip).");
+                }
+            }
+
+            return map;
+        }
+
+        // Temporarily writes the chosen reference pose into each clip's AnimationClipSettings so Rukhanka's baker picks it
+        // up, returning the originals so the caller can restore them after baking. Returns empty when nothing to override.
+        private static List<(AnimationClip clip, AnimationClipSettings settings)> ApplyReferencePoseOverrides(
+            HashSet<AnimationClip> clips, Dictionary<AnimationClip, RukhankaAnimationClip> refPoseByClip)
+        {
+            var restores = new List<(AnimationClip, AnimationClipSettings)>();
+
+            if (refPoseByClip == null)
+                return restores;
+
+            foreach (var clip in clips)
+            {
+                if (!refPoseByClip.TryGetValue(clip, out var src))
+                    continue;
+
+                // GetAnimationClipSettings returns a fresh instance each call, so 'original' is unaffected by the edit.
+                var original = AnimationUtility.GetAnimationClipSettings(clip);
+                var overridden = AnimationUtility.GetAnimationClipSettings(clip);
+                overridden.additiveReferencePoseClip = src.additiveReferencePoseClip;
+                overridden.additiveReferencePoseTime = src.additiveReferencePoseTime;
+                AnimationUtility.SetAnimationClipSettings(clip, overridden);
+
+                restores.Add((clip, original));
+            }
+
+            return restores;
         }
 
         private Hash128 BakeAvatarMask(IBaker baker, Entity trackEntity, RigDefinitionAuthoring rigDef)
@@ -181,11 +264,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
             baker.AddComponent(trackEntity, new TrackFallbackOverride
             {
                 FallbackClipHash = exitIdleHash,
+                TrackOrder = FallbackTrackOrder.Compute(this),
                 BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
                 BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
                 PlaybackMode = FallbackPlaybackMode,
                 LayerIndex = LayerIndex,
-                BlendMode = AnimationBlendingMode.Override,
+                BlendMode = BlendMode,
                 AvatarMaskHash = avatarMaskHash,
                 PositionOffset = OffsetPosition,
                 RotationOffset = OffsetRotation,

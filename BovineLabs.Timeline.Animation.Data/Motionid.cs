@@ -8,12 +8,16 @@ namespace BovineLabs.Timeline.Animation
     {
         public const uint Fallback = 0xFFFFFFFF;
 
-        public static uint Compute(Entity track, int layerIndex, Hash128 clipHash)
+        public static uint Compute(Entity track, int layerIndex, Hash128 clipHash, Entity instance)
         {
             var h = new xxHash3.StreamingState(true, 0x1337);
             h.Update(track.Index);
             h.Update(track.Version);
             h.Update(layerIndex);
+            // Per-instance discriminator: two instances of the same clip on the same track+layer must
+            // produce distinct ids (otherwise they collapse into one and crossfade against themselves).
+            h.Update(instance.Index);
+            h.Update(instance.Version);
             h.Update(clipHash.Value.x);
             h.Update(clipHash.Value.y);
             h.Update(clipHash.Value.z);

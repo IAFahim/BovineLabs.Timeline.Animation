@@ -38,7 +38,10 @@ namespace BovineLabs.Timeline.Animation
                 AnimDB = blobDB.animations,
                 MaskDB = blobDB.avatarMasks,
                 DeltaTime = SystemAPI.Time.DeltaTime,
-                IsScrubbing = isScrubbing
+                IsScrubbing = isScrubbing,
+                // Optional per-actor layer-weight overrides written by TimelineLayerWeightTrackSystem. Absent on
+                // any actor with no LayerWeight track, in which case the multiplier defaults to 1 (no change).
+                LayerOverrides = SystemAPI.GetBufferLookup<LayerWeightOverride>(true),
             };
 
             state.Dependency = job.ScheduleParallel(state.Dependency);
@@ -51,10 +54,15 @@ namespace BovineLabs.Timeline.Animation
         {
             [ReadOnly] public NativeHashMap<Hash128, BlobAssetReference<AnimationClipBlob>> AnimDB;
             [ReadOnly] public NativeHashMap<Hash128, BlobAssetReference<AvatarMaskBlob>> MaskDB;
+
+            // Optional, per-actor: authored layer-weight overrides keyed by LayerIndex. Absent => multiplier 1.
+            [ReadOnly] public BufferLookup<LayerWeightOverride> LayerOverrides;
+
             public float DeltaTime;
             public bool IsScrubbing;
 
             public void Execute(
+                Entity actor,
                 ref BlendGroupTimer timer,
                 in FallbackBlend fallbackData,
                 ref DynamicBuffer<BlendGroupEntry> blendEntries,
@@ -72,7 +80,7 @@ namespace BovineLabs.Timeline.Animation
                 EmitFallback(ref timer, in fallbackData, baseControl, ref atps);
 
                 var layerSums = AccumulateOverrideSums(in smoothEntries);
-                EmitClips(in smoothEntries, baseLayer, baseControl, in layerSums, ref atps);
+                EmitClips(actor, in smoothEntries, baseLayer, baseControl, in layerSums, ref atps);
 
                 SortByLayer(ref atps);
 
@@ -278,6 +286,7 @@ namespace BovineLabs.Timeline.Animation
             }
 
             private void EmitClips(
+                Entity actor,
                 in DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
                 int baseLayer,
                 float baseControl,
@@ -316,6 +325,14 @@ namespace BovineLabs.Timeline.Animation
                         layerWeight = 1.0f;
                     }
 
+                    // LAYER-WEIGHT OVERRIDE (optional): a LayerWeight timeline track can fade a whole animation
+                    // layer in/out. The authored multiplier (1 when absent => unchanged) scales this layer's
+                    // overall weight. Applied to layerWeight — the per-layer stacking amount Rukhanka consumes in
+                    // BlendLayerPose/ApplyLayerValue (lerp for Override, add for Additive) — AFTER the
+                    // BlendLayerMath normalization above, so the within-layer clip distribution (weight) is left
+                    // intact and the override composes with the normalization rather than fighting it.
+                    layerWeight *= LayerOverrideMultiplier(actor, s.LayerIndex);
+
                     atps.Add(new AnimationToProcessComponent
                     {
                         animation = clipBlob,
@@ -333,6 +350,20 @@ namespace BovineLabs.Timeline.Animation
                         applyFootIK = s.ApplyFootIK
                     });
                 }
+            }
+
+            // Looks up the authored layer-weight multiplier for a given actor + layer. Returns 1 (no change) when
+            // the actor has no override buffer (no LayerWeight track) or no entry for this layer.
+            private float LayerOverrideMultiplier(Entity actor, int layerIndex)
+            {
+                if (!LayerOverrides.TryGetBuffer(actor, out var overrides))
+                    return 1f;
+
+                for (var i = 0; i < overrides.Length; i++)
+                    if (overrides[i].LayerIndex == layerIndex)
+                        return overrides[i].Multiplier;
+
+                return 1f;
             }
 
             private static float OverrideSumForLayer(in DynamicBuffer<SmoothBlendGroupEntry> entries, int layer)

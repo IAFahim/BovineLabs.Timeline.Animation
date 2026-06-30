@@ -71,6 +71,9 @@ namespace BovineLabs.Timeline.Animation
     public struct TrackFallbackOverride : IComponentData
     {
         public Hash128 FallbackClipHash;
+
+        // Sibling index of the source track, baked from the timeline. Used to break same-layer ties deterministically.
+        public int TrackOrder;
         public float BlendInSpeed;
         public float BlendOutSpeed;
         public FallbackPlaybackMode PlaybackMode;

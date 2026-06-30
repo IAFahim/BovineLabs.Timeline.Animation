@@ -43,6 +43,7 @@ namespace BovineLabs.Timeline.Animation.Editor
         private const double MinDuration = 0.001d;
         private const double Epsilon = 0.000001d;
         private const string UndoName = "Match Rukhanka Animation Clip Length";
+        private const string OffsetUndoName = "Match Rukhanka Animation Clip Offsets";
 
         public static bool MatchSelected(Object asset, bool resetPlayback)
         {
@@ -62,6 +63,57 @@ namespace BovineLabs.Timeline.Animation.Editor
                                        RefreshReason.WindowNeedsRedraw);
 
             return changed;
+        }
+
+        // Copies the previous clip's authored positionOffset + eulerAnglesOffset onto every selected
+        // RukhankaAnimationClip that matches the given asset. This is the authored-offset copy only;
+        // sampling the previous clip's true root-end pose is a future upgrade.
+        public static bool MatchOffsetsToPrevious(Object asset)
+        {
+            var changed = false;
+            var clips = TimelineEditor.selectedClips;
+
+            for (var i = 0; i < clips.Length; i++)
+            {
+                var clip = clips[i];
+
+                if (clip == null || clip.asset != asset || clip.asset is not RukhankaAnimationClip target) continue;
+
+                if (FindPreviousClip(clip)?.asset is not RukhankaAnimationClip source) continue;
+
+                if (target.positionOffset == source.positionOffset &&
+                    target.eulerAnglesOffset == source.eulerAnglesOffset) continue;
+
+                Undo.RecordObject(target, OffsetUndoName);
+                target.positionOffset = source.positionOffset;
+                target.eulerAnglesOffset = source.eulerAnglesOffset;
+                EditorUtility.SetDirty(target);
+                changed = true;
+            }
+
+            if (changed)
+                TimelineEditor.Refresh(RefreshReason.ContentsModified | RefreshReason.SceneNeedsUpdate |
+                                       RefreshReason.WindowNeedsRedraw);
+
+            return changed;
+        }
+
+        private static TimelineClip FindPreviousClip(TimelineClip clip)
+        {
+            var track = clip.GetParentTrack();
+
+            if (track == null) return null;
+
+            TimelineClip previous = null;
+
+            foreach (var other in track.GetClips())
+            {
+                if (other == clip || other.start >= clip.start) continue;
+
+                if (previous == null || other.start > previous.start) previous = other;
+            }
+
+            return previous;
         }
 
         public static bool MatchSource(TimelineClip clip, TrackAsset track, bool resetPlayback, bool recordUndo)

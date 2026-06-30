@@ -576,7 +576,10 @@ namespace BovineLabs.Timeline.Animation
                             Weight = mw.weight * totalTimelineWeight,
                             AvatarMaskHash = avatarMaskHash,
                             BlendMode = AnimationBlendingMode.Override,
-                            MotionId = MotionId.Compute(trackEntity, trackData.LayerIndex, clipHash),
+                            // Each blend-tree motion slot is a distinct instance; key by its slot index so
+                            // two motions referencing the same clip on this track+layer do not collapse.
+                            MotionId = MotionId.Compute(trackEntity, trackData.LayerIndex, clipHash,
+                                new Entity { Index = mw.motionIndex }),
                             PositionOffset = finalPosOffset,
                             RotationOffset = finalRotOffset,
                             RemoveStartOffset = removeStartOffset,

@@ -183,7 +183,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             {
                 var track = new Entity { Index = i, Version = i * 7 + 1 };
                 var clipHash = new Hash128((uint)i, (uint)(i * 3), (uint)(i * 5), (uint)(i * 11));
-                var id = MotionId.Compute(track, i & 3, clipHash);
+                var id = MotionId.Compute(track, i & 3, clipHash, track);
                 Assert.AreNotEqual(MotionId.Fallback, id,
                     "a computed motion id must never collide with the fallback sentinel");
             }
@@ -194,9 +194,21 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             var track = new Entity { Index = 12, Version = 3 };
             var clipHash = new Hash128(1u, 2u, 3u, 4u);
+            var instance = new Entity { Index = 7, Version = 2 };
             Assert.AreEqual(
-                MotionId.Compute(track, 1, clipHash),
-                MotionId.Compute(track, 1, clipHash));
+                MotionId.Compute(track, 1, clipHash, instance),
+                MotionId.Compute(track, 1, clipHash, instance));
+        }
+
+        [Test]
+        public void Compute_DistinctInstances_SameTrackLayerClip_ProduceDistinctIds()
+        {
+            var track = new Entity { Index = 12, Version = 3 };
+            var clipHash = new Hash128(1u, 2u, 3u, 4u);
+            var a = MotionId.Compute(track, 1, clipHash, new Entity { Index = 100, Version = 1 });
+            var b = MotionId.Compute(track, 1, clipHash, new Entity { Index = 101, Version = 1 });
+            Assert.AreNotEqual(a, b,
+                "two instances of the same clip on the same track+layer must not collapse to one id");
         }
 
         [Test]

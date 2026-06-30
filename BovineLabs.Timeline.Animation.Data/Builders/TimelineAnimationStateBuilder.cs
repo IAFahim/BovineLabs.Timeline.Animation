@@ -47,9 +47,16 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             FallbackPlaybackMode mode = FallbackPlaybackMode.Loop)
         {
             return new TimelineAnimationStateBuilder(
-                clipHash, 1f / math.max(MinDuration, blendInDuration), 1f / math.max(MinDuration, blendOutDuration),
+                clipHash, DurationToSpeed(blendInDuration), DurationToSpeed(blendOutDuration),
                 _fallbackBlob, _fallbackBlobHash, mode, _positionOffset, _rotationOffset, _removeStartOffset,
                 _applyFootIK);
+        }
+
+        // A duration of 0 (or below the floor) means "no global smoothing" - encoded as speed 0, the
+        // instant-snap sentinel IntegrateWeights expects. Only a strictly positive duration smooths.
+        private static float DurationToSpeed(float duration)
+        {
+            return duration > MinDuration ? 1f / duration : 0f;
         }
 
         public TimelineAnimationStateBuilder WithFallbackOffsets(float3 pos, quaternion rot, bool removeStart,
@@ -104,6 +111,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             builder.AddBuffer<BlendGroupEntry>();
             builder.AddBuffer<SmoothBlendGroupEntry>();
             builder.AddBuffer<BlendTreePlaybackStateElement>();
+            builder.AddBuffer<BlendTree1DPlaybackStateElement>();
+            builder.AddBuffer<BlendTreeDirectPlaybackStateElement>();
         }
     }
 }

@@ -86,6 +86,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         protected override void Bake(BakingContext context)
         {
+            if (trackOffset != TrackOffset.ApplyTransformOffsets)
+            {
+                Debug.LogWarning(
+                    $"[BlendTree2DTrack] '{name}' uses Track Offset mode '{trackOffset}', which is not supported in DOTS — offsets are ignored. Use 'Apply Transform Offsets'.");
+            }
+
             var director = context.Director;
             var rigDef = director.ResolveRigDefinition(this);
 
@@ -145,6 +151,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 baker.AddComponent(trackEntity, new TrackFallbackOverride
                 {
                     FallbackClipHash = BakingUtils.ComputeAnimationHash(ExitIdleClip, avatar),
+                    TrackOrder = FallbackTrackOrder.Compute(this),
                     BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
                     BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
                     PlaybackMode = FallbackPlaybackMode,

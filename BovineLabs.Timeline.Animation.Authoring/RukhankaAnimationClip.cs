@@ -26,6 +26,15 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public bool applyFootIK = true;
 
+        [Header("Additive Reference Pose")]
+        [Tooltip(
+            "Base pose subtracted from this clip when the TRACK's Blend Mode is Additive (recoil/breathing/lean on top of lower layers). Leave null to keep current behavior: the clip's own import-settings reference pose, or its first frame if it has none. Ignored when the track's Blend Mode is Override.")]
+        public AnimationClip additiveReferencePoseClip;
+
+        [Tooltip(
+            "Time (in seconds) into Additive Reference Pose Clip to sample the base pose from. Only used when Additive Reference Pose Clip is set and the track's Blend Mode is Additive.")]
+        public float additiveReferencePoseTime = 0f;
+
         public override double duration => animationClipHolder != null ? animationClipHolder.length : base.duration;
 
         public ClipCaps clipCaps => SupportedClipCaps;

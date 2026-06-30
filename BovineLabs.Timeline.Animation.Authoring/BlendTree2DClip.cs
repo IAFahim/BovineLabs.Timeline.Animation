@@ -38,6 +38,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public override Playable CreatePlayable(PlayableGraph graph, GameObject owner)
         {
+            // Documented gap: edit-mode scrub shows the bind pose, not a blended pose. The motions
+            // (AnimationClips + their 2D positions) live on BlendTree2DTrack, not on this clip, and
+            // Timeline gives a clip's PlayableAsset no clean back-reference to its parent track here.
+            // A faithful preview would require replicating the runtime 2D blend-weight algorithm at
+            // BlendParameter (fragile), so we intentionally return an empty mixer.
             if (!Application.isPlaying)
                 return AnimationMixerPlayable.Create(graph);
 

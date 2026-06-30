@@ -11,6 +11,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
             {
                 var entity = GetEntity(TransformUsageFlags.Dynamic);
                 AddBuffer<WeaponAnchorSample>(entity);
+                AddComponent(entity, new WeaponAnchorRest { Rotation = Unity.Mathematics.quaternion.identity });
             }
         }
     }

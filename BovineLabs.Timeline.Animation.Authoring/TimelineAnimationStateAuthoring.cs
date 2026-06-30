@@ -17,11 +17,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
         [Tooltip("How the fallback animation wraps: Loop restarts, Clamp stops at end, Hold stays on last frame.")]
         public FallbackPlaybackMode fallbackPlaybackMode = FallbackPlaybackMode.Loop;
 
-        [Tooltip("Time in seconds to smoothly transition into a new timeline clip.")] [Min(0.001f)]
-        public float blendInDuration = 0.25f;
+        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs).")] [Min(0f)]
+        public float blendInDuration = 0.2f;
 
-        [Tooltip("Time in seconds to smoothly transition out of a timeline clip.")] [Min(0.001f)]
-        public float blendOutDuration = 0.25f;
+        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs).")] [Min(0f)]
+        public float blendOutDuration = 0.2f;
 
         [Header("Fallback Transform Offsets")] public Vector3 positionOffset = Vector3.zero;
 
@@ -32,6 +32,15 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public bool removeStartOffset;
 
         public bool applyFootIK = true;
+
+        [Header("Inertialization")]
+        [Tooltip(
+            "Momentum-preserving transition window in seconds. 0 = OFF (exactly the current crossfade-only behavior). " +
+            "When > 0, a dominant-clip change cuts to the new clip immediately and a per-bone offset decays to zero " +
+            "over this window, carrying the previous motion's momentum across the cut (no mush, no foot slide). " +
+            "Typical 0.1-0.3. With this on you can lower the global blend durations to 0 for the crispest result.")]
+        [Min(0f)]
+        public float inertializationDuration;
 
         public class Baker : Baker<TimelineAnimationStateAuthoring>
         {
@@ -74,6 +83,24 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 blobBuilder.Dispose();
                 commands.AddBlobAsset(ref fallbackRef, out _);
                 commands.AddComponent(new DefaultBlendGroupFallback { Value = fallbackRef });
+
+                // Opt-in inertialization: only provision the per-rig state + per-bone buffer when the designer set a
+                // window. Default 0 = OFF = the rig never gets these components = exactly the current behavior.
+                // The buffer is left empty here; InertializationSystem sizes it to the runtime rig bone count and
+                // seeds the displayed-pose history on the first frame (the exact bone count is not reliably known at
+                // bake because the rig blob is built with bone-stripping masks).
+                if (authoring.inertializationDuration > 0f)
+                {
+                    AddComponent(entity, new InertializationState
+                    {
+                        duration = authoring.inertializationDuration,
+                        elapsed = 0f,
+                        active = 0,
+                        lastDominant = 0,
+                        initialized = 0,
+                    });
+                    AddBuffer<InertializationBoneState>(entity);
+                }
             }
 
             private (Hash128 hash, BlobAssetReference<AnimationClipBlob> blob) BakeFallbackAnimation(

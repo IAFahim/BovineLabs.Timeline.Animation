@@ -126,6 +126,7 @@ namespace BovineLabs.Timeline.Animation
 
                 if (FallbackOverrideResolve.Matches(in latched, in best)) return;
 
+                // Deliberate follow-up: the winning override is stamped instantly; a weighted crossfade between overrides is not yet implemented.
                 Fallbacks[entity] = new FallbackBlend
                 {
                     ClipHash = best.FallbackClipHash,

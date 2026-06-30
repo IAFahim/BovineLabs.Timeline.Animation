@@ -1,0 +1,192 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using BovineLabs.Timeline.Authoring;
+using Rukhanka;
+using Rukhanka.Hybrid;
+using Unity.Entities;
+using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
+using UnityEngine.Timeline;
+using Component = UnityEngine.Component;
+using Hash128 = Unity.Entities.Hash128;
+
+namespace BovineLabs.Timeline.Animation.Authoring
+{
+    [Serializable]
+    [TrackClipType(typeof(BlendTreeDirectClip))]
+    [TrackColor(0.85f, 0.70f, 0.20f)]
+    [TrackBindingType(typeof(Animator))]
+    [DisplayName("BovineLabs/Animation/Blend Tree Direct")]
+    public class BlendTreeDirectTrack : DOTSTrack
+    {
+        [Tooltip(
+            "Layer index. 0 = base (full body). Put each masked region on its own layer >= 1 so it overrides only its masked bones over the layers below. Two clips that should play on different body parts at full strength (e.g. upper body + lower body, or left arm + right arm) must be on different layers, each with its own Avatar Mask.")]
+        public int LayerIndex;
+
+        [Tooltip("Normalize the per-motion weights when their sum exceeds 1.")]
+        public bool normalizeBlendValues = true;
+
+        [Header("Track Offsets")] public TrackOffset trackOffset = TrackOffset.ApplyTransformOffsets;
+
+        public Vector3 positionOffset = Vector3.zero;
+        public Vector3 eulerAnglesOffset = Vector3.zero;
+
+        [Header("Avatar Mask")] public AvatarMask avatarMask;
+
+        public bool applyAvatarMask = true;
+
+        [Header("Exit / Fallback Override (Optional)")]
+        [Tooltip(
+            "Animation clip to play as fallback when no timeline clips are active on this track's target. Overrides the default fallback set on TimelineAnimationStateAuthoring.")]
+        public AnimationClip ExitIdleClip;
+
+        [Tooltip("Time in seconds to blend into this fallback clip.")] [Min(0.001f)]
+        public float BlendInDuration = 0.25f;
+
+        [Tooltip("Time in seconds to blend out of this fallback clip.")] [Min(0.001f)]
+        public float BlendOutDuration = 0.25f;
+
+        [Tooltip("How the fallback animation wraps.")]
+        public FallbackPlaybackMode FallbackPlaybackMode = FallbackPlaybackMode.Loop;
+
+        [Tooltip(
+            "Motion entries that define the blend tree. Each entry maps an animation clip to an explicit static weight.")]
+        public List<BlendTreeDirectMotionEntry> Motions = new();
+
+#if UNITY_EDITOR
+
+        public override Playable CreateTrackMixer(PlayableGraph graph, GameObject go, int inputCount)
+        {
+            if (!Application.isPlaying)
+            {
+                var mixer = AnimationMixerPlayable.Create(graph, inputCount);
+
+                var director = go != null ? go.GetComponent<PlayableDirector>() : null;
+                var rawBinding = director != null ? director.GetGenericBinding(this) : null;
+                var animator = rawBinding as Animator ?? (rawBinding as Component)?.GetComponent<Animator>();
+                if (animator != null)
+                {
+                    animator.cullingMode = 0;
+
+                    var output = AnimationPlayableOutput.Create(graph, name, animator);
+                    output.SetSourcePlayable(mixer);
+                    output.SetWeight(1.0f);
+                }
+
+                return mixer;
+            }
+
+            return base.CreateTrackMixer(graph, go, inputCount);
+        }
+#endif
+
+        protected override void Bake(BakingContext context)
+        {
+            if (trackOffset != TrackOffset.ApplyTransformOffsets)
+            {
+                Debug.LogWarning(
+                    $"[BlendTreeDirectTrack] '{name}' uses Track Offset mode '{trackOffset}', which is not supported in DOTS — offsets are ignored. Use 'Apply Transform Offsets'.");
+            }
+
+            var director = context.Director;
+            var rigDef = director.ResolveRigDefinition(this);
+
+            if (rigDef == null)
+            {
+                Debug.LogWarning(
+                    $"[BlendTreeDirectTrack] '{name}' has no RigDefinitionAuthoring binding — animation data will not be baked.");
+                base.Bake(context);
+                return;
+            }
+
+            var baker = context.Baker;
+            var trackEntity = context.TrackEntity;
+            var avatar = rigDef.GetAvatar();
+
+            Hash128 avatarMaskHash = default;
+            if (applyAvatarMask && avatarMask != null)
+            {
+                var maskBaker = new AvatarMaskBaker();
+                var maskBlob = maskBaker.CreateAvatarMaskBlob(baker, avatarMask, rigDef);
+                avatarMaskHash = maskBlob.Value.hash;
+                baker.AddBuffer<AvatarMaskBakingData>(trackEntity).Add(new AvatarMaskBakingData
+                    { rigEntity = baker.GetEntity(rigDef, TransformUsageFlags.Dynamic), dataBlob = maskBlob });
+            }
+
+            baker.AddComponent(trackEntity, new BlendAnimationTreeDirectTrackData
+            {
+                LayerIndex = LayerIndex,
+                NormalizeBlendValues = normalizeBlendValues,
+                TrackPositionOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero,
+                TrackRotationOffset = trackOffset == TrackOffset.ApplyTransformOffsets
+                    ? Quaternion.Euler(eulerAnglesOffset)
+                    : Quaternion.identity,
+                ApplyAvatarMask = applyAvatarMask,
+                AvatarMaskHash = avatarMaskHash
+            });
+
+            var motionBuffer = baker.AddBuffer<BlendTreeDirectMotionData>(trackEntity);
+            var clipsToBake = new List<AnimationClip>();
+            var index = 0;
+
+            foreach (var motion in Motions)
+            {
+                if (motion.clip == null) continue;
+                motionBuffer.Add(new BlendTreeDirectMotionData
+                {
+                    AnimationHash = BakingUtils.ComputeAnimationHash(motion.clip, avatar),
+                    Weight = motion.weight,
+                    MotionIndex = index++
+                });
+                clipsToBake.Add(motion.clip);
+            }
+
+            if (ExitIdleClip != null)
+            {
+                baker.AddComponent(trackEntity, new TrackFallbackOverride
+                {
+                    FallbackClipHash = BakingUtils.ComputeAnimationHash(ExitIdleClip, avatar),
+                    TrackOrder = FallbackTrackOrder.Compute(this),
+                    BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
+                    BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
+                    PlaybackMode = FallbackPlaybackMode,
+                    LayerIndex = LayerIndex,
+                    BlendMode = AnimationBlendingMode.Override,
+                    AvatarMaskHash = avatarMaskHash,
+                    PositionOffset = trackOffset == TrackOffset.ApplyTransformOffsets ? positionOffset : Vector3.zero,
+                    RotationOffset = trackOffset == TrackOffset.ApplyTransformOffsets
+                        ? Quaternion.Euler(eulerAnglesOffset)
+                        : Quaternion.identity,
+                    RemoveStartOffset = true,
+                    ApplyFootIK = true
+                });
+                clipsToBake.Add(ExitIdleClip);
+            }
+
+            if (clipsToBake.Count > 0)
+            {
+                var bakedAnimations =
+                    new AnimationClipBaker().BakeAnimations(baker, clipsToBake.ToArray(), avatar, rigDef.gameObject);
+                var e = baker.CreateAdditionalEntity(TransformUsageFlags.None, false, name + "_BlendTreeDirectAssets");
+                var dbBuffer = baker.AddBuffer<NewBlobAssetDatabaseRecord<AnimationClipBlob>>(e);
+                dbBuffer.AddValidAnimations(bakedAnimations);
+
+                if (bakedAnimations.IsCreated) bakedAnimations.Dispose();
+            }
+
+            base.Bake(context);
+        }
+
+        [Serializable]
+        public class BlendTreeDirectMotionEntry
+        {
+            [Tooltip("Animation clip for this motion entry.")]
+            public AnimationClip clip;
+
+            [Tooltip("Explicit static weight for this motion. Optionally normalized at runtime.")] [Min(0f)]
+            public float weight = 1f;
+        }
+    }
+}

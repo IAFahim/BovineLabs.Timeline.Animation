@@ -13,6 +13,8 @@ namespace BovineLabs.Timeline.Animation.Editor
         private SerializedProperty m_EulerAnglesOffset;
         private SerializedProperty m_PositionOffset;
         private SerializedProperty m_RemoveStartOffset;
+        private SerializedProperty m_AdditiveReferencePoseClip;
+        private SerializedProperty m_AdditiveReferencePoseTime;
 
         private void OnEnable()
         {
@@ -21,6 +23,8 @@ namespace BovineLabs.Timeline.Animation.Editor
             m_EulerAnglesOffset = serializedObject.FindProperty("eulerAnglesOffset");
             m_RemoveStartOffset = serializedObject.FindProperty("removeStartOffset");
             m_ApplyFootIK = serializedObject.FindProperty("applyFootIK");
+            m_AdditiveReferencePoseClip = serializedObject.FindProperty("additiveReferencePoseClip");
+            m_AdditiveReferencePoseTime = serializedObject.FindProperty("additiveReferencePoseTime");
         }
 
         public override void OnInspectorGUI()
@@ -41,6 +45,20 @@ namespace BovineLabs.Timeline.Animation.Editor
             EditorGUILayout.PropertyField(m_ApplyFootIK, new GUIContent("Foot IK"));
             EditorGUI.indentLevel--;
 
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Additive Reference Pose", EditorStyles.boldLabel);
+            EditorGUI.indentLevel++;
+            EditorGUILayout.PropertyField(m_AdditiveReferencePoseClip, new GUIContent("Reference Pose Clip"));
+            using (new EditorGUI.DisabledScope(m_AdditiveReferencePoseClip.objectReferenceValue == null))
+            {
+                EditorGUILayout.PropertyField(m_AdditiveReferencePoseTime, new GUIContent("Reference Pose Time"));
+            }
+
+            EditorGUILayout.HelpBox(
+                "Only used when this clip's track Blend Mode = Additive. Leave the clip empty to keep current behavior.",
+                MessageType.None);
+            EditorGUI.indentLevel--;
+
             serializedObject.ApplyModifiedProperties();
 
             if (animationClipChanged) MatchSelectedClips(true);
@@ -50,6 +68,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             using (new EditorGUI.DisabledScope(targets.Length == 0))
             {
                 if (GUILayout.Button("Match Timeline Clip Length")) MatchSelectedClips(true);
+                if (GUILayout.Button("Match Offsets To Previous")) MatchOffsetsToPrevious();
             }
         }
 
@@ -57,6 +76,12 @@ namespace BovineLabs.Timeline.Animation.Editor
         {
             for (var i = 0; i < targets.Length; i++)
                 RukhankaAnimationClipTimeline.MatchSelected(targets[i], resetPlayback);
+        }
+
+        private void MatchOffsetsToPrevious()
+        {
+            for (var i = 0; i < targets.Length; i++)
+                RukhankaAnimationClipTimeline.MatchOffsetsToPrevious(targets[i]);
         }
     }
 }
