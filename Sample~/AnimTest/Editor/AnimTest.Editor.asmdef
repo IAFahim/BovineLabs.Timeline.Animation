@@ -1,0 +1,33 @@
+{
+    "name": "AnimTest.Editor",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Timeline.Animation.Authoring",
+        "BovineLabs.Timeline.Animation",
+        "BovineLabs.Timeline.Animation.Data",
+        "BovineLabs.Timeline.Core.Authoring",
+        "BovineLabs.Timeline.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Authoring",
+        "BovineLabs.Reaction.Data",
+        "BovineLabs.Core",
+        "BovineLabs.Core.Authoring",
+        "Rukhanka.Hybrid",
+        "Rukhanka.Runtime",
+        "Unity.Mathematics",
+        "Unity.Entities",
+        "Unity.Collections",
+        "Unity.Scenes",
+        "Unity.Timeline"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
