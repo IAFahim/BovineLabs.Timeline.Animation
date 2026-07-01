@@ -35,16 +35,56 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public ClipCaps clipCaps => ClipCaps.All;
 
 #if UNITY_EDITOR
+        // Back-reference stamped by BlendTree2DTrack.CreateTrackMixer so the edit-mode preview can reach the track's
+        // Motions (a clip's PlayableAsset otherwise has no clean handle on its owning track). Not serialized.
+        [System.NonSerialized] internal BlendTree2DTrack EditorPreviewTrack;
 
         public override Playable CreatePlayable(PlayableGraph graph, GameObject owner)
         {
-            // Documented gap: edit-mode scrub shows the bind pose, not a blended pose. The motions
-            // (AnimationClips + their 2D positions) live on BlendTree2DTrack, not on this clip, and
-            // Timeline gives a clip's PlayableAsset no clean back-reference to its parent track here.
-            // A faithful preview would require replicating the runtime 2D blend-weight algorithm at
-            // BlendParameter (fragile), so we intentionally return an empty mixer.
             if (!Application.isPlaying)
-                return AnimationMixerPlayable.Create(graph);
+            {
+                var motions = EditorPreviewTrack?.Motions;
+
+                // No track back-ref or no motions: fall back to the empty mixer (bind pose), exactly as before.
+                if (motions == null || motions.Count == 0)
+                    return AnimationMixerPlayable.Create(graph);
+
+                // Nearest-neighbor approximation, NOT the runtime weighted blend: pick the single motion whose 2D
+                // position is closest (Euclidean) to the sample point and preview just that clip. The sample point is
+                // the authored BlendParameter for ClipValue; for velocity/link-driven kinds there is no live value in
+                // edit mode, so we sample the origin (idle). Trust runtime for the true blended pose.
+                var sample = ReadKind == BlendDirectionReadKind.ClipValue ? BlendParameter : float2.zero;
+
+                AnimationClip dominant = null;
+                var bestDistanceSq = float.MaxValue;
+
+                foreach (var motion in motions)
+                {
+                    if (motion?.clip == null)
+                        continue;
+
+                    var pos = motion.CalcDirection();
+                    var d = new float2(pos.x, pos.y) - sample;
+                    var distSq = math.lengthsq(d);
+
+                    if (distSq < bestDistanceSq)
+                    {
+                        bestDistanceSq = distSq;
+                        dominant = motion.clip;
+                    }
+                }
+
+                if (dominant == null)
+                    return AnimationMixerPlayable.Create(graph);
+
+                var asset = CreateInstance<AnimationPlayableAsset>();
+                asset.clip = dominant;
+                asset.applyFootIK = applyFootIK;
+                asset.removeStartOffset = removeStartOffset;
+                asset.position = positionOffset;
+                asset.rotation = Quaternion.Euler(eulerAnglesOffset);
+                return asset.CreatePlayable(graph, owner);
+            }
 
             return base.CreatePlayable(graph, owner);
         }

@@ -29,7 +29,7 @@ You have **three** ways to control transitions — pick per situation:
 2. **Global crossfade** (`blendIn/blendOutDuration` on the actor, default **0.2s**) — smooths *every* transition, including switches **between two separate timelines** (trackA ends → trackB starts), where per-clip ease alone can't crossfade. Set 0 for hard cuts; raise for softer.
 3. **Inertialization** (see §7) — momentum-preserving cuts; the best feel for combat. Off by default.
 
-Zero ease + zero global = an instant hard cut (Unity parity), which was impossible before.
+Zero ease + zero global = a **true instant hard cut** (Unity parity). This now snaps consistently on **every** track — `RukhankaAnimationTrack` *and* `BlendTree2DTrack` — so a zero there really is a zero (the old "per-clip zero still smeared ~0.001s" quirk is gone).
 
 ## 7. Extras you didn't have in Unity Timeline
 Blend-tree tracks (Rukhanka does the math; you author thresholds/weights):

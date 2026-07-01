@@ -8,8 +8,6 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
 {
     public readonly struct TimelineAnimationStateBuilder
     {
-        private const float MinDuration = 0.001f;
-
         private readonly Hash128 _fallbackClipHash;
         private readonly float _blendInSpeed;
         private readonly float _blendOutSpeed;
@@ -22,11 +20,16 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         private readonly bool _removeStartOffset;
         private readonly bool _applyFootIK;
 
+        // Fallback blend mode + layer. Defaults (Override / 0) reproduce the previous hardcoded behavior exactly, so
+        // existing bakes are unchanged. Additive layers the fallback on top of lower layers (breathing/lean overlay).
+        private readonly AnimationBlendingMode _blendMode;
+        private readonly int _layerIndex;
+
         public TimelineAnimationStateBuilder(
             Hash128 fallbackClipHash, float blendInSpeed, float blendOutSpeed,
             BlobAssetReference<AnimationClipBlob> fallbackBlob, Hash128 fallbackBlobHash,
             FallbackPlaybackMode playbackMode, float3 positionOffset, quaternion rotationOffset,
-            bool removeStartOffset, bool applyFootIK)
+            bool removeStartOffset, bool applyFootIK, AnimationBlendingMode blendMode, int layerIndex)
         {
             _fallbackClipHash = fallbackClipHash;
             _blendInSpeed = blendInSpeed;
@@ -38,6 +41,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             _rotationOffset = rotationOffset;
             _removeStartOffset = removeStartOffset;
             _applyFootIK = applyFootIK;
+            _blendMode = blendMode;
+            _layerIndex = layerIndex;
         }
 
         public TimelineAnimationStateBuilder WithFallback(
@@ -49,7 +54,18 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
             return new TimelineAnimationStateBuilder(
                 clipHash, DurationToSpeed(blendInDuration), DurationToSpeed(blendOutDuration),
                 _fallbackBlob, _fallbackBlobHash, mode, _positionOffset, _rotationOffset, _removeStartOffset,
-                _applyFootIK);
+                _applyFootIK, _blendMode, _layerIndex);
+        }
+
+        // Opens up the fallback blend so an Additive fallback (e.g. breathing/lean overlay) can ride on top of a base
+        // Override fallback. Default Override/0 keeps the historical behavior. Additive on layer 0 adds over the bind
+        // pose (foot-gun) — put an Additive overlay on layer >= 1.
+        public TimelineAnimationStateBuilder WithFallbackBlend(AnimationBlendingMode blendMode, int layerIndex)
+        {
+            return new TimelineAnimationStateBuilder(
+                _fallbackClipHash, _blendInSpeed, _blendOutSpeed,
+                _fallbackBlob, _fallbackBlobHash, _playbackMode, _positionOffset, _rotationOffset, _removeStartOffset,
+                _applyFootIK, blendMode, layerIndex);
         }
 
         // A duration of 0 (or below the floor) means "no global smoothing" - encoded as speed 0, the
@@ -65,7 +81,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         {
             return new TimelineAnimationStateBuilder(
                 _fallbackClipHash, _blendInSpeed, _blendOutSpeed,
-                _fallbackBlob, _fallbackBlobHash, _playbackMode, pos, rot, removeStart, footIK);
+                _fallbackBlob, _fallbackBlobHash, _playbackMode, pos, rot, removeStart, footIK, _blendMode,
+                _layerIndex);
         }
 
         public TimelineAnimationStateBuilder WithFallbackBlob(
@@ -74,7 +91,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         {
             return new TimelineAnimationStateBuilder(
                 _fallbackClipHash, _blendInSpeed, _blendOutSpeed,
-                blob, hash, _playbackMode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK);
+                blob, hash, _playbackMode, _positionOffset, _rotationOffset, _removeStartOffset, _applyFootIK,
+                _blendMode, _layerIndex);
         }
 
         public FallbackBlend BuildFallbackBlend()
@@ -85,8 +103,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 BlendInSpeed = _blendInSpeed,
                 BlendOutSpeed = _blendOutSpeed,
                 PlaybackMode = _playbackMode,
-                LayerIndex = 0,
-                BlendMode = AnimationBlendingMode.Override,
+                LayerIndex = _layerIndex,
+                BlendMode = _blendMode,
                 AvatarMaskHash = default,
                 PositionOffset = _positionOffset,
                 RotationOffset = _rotationOffset,

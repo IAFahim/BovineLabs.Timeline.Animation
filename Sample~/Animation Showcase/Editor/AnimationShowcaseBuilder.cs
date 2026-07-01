@@ -161,6 +161,9 @@ public static class AnimationShowcaseBuilder
         state.blendInDuration = 0.25f;
         state.blendOutDuration = 0.25f;
         state.applyFootIK = true;
+        // Sample-only AAA feel: momentum-preserving inertialization on the demo rig. The library field default stays 0
+        // (opt-in); we set it here so the out-of-box showcase transitions crisply without foot-slide.
+        state.inertializationDuration = 0.15f;
     }
 
     private static PlayableDirector MakeDirector(Scene scene, string name, Vector3 pos)

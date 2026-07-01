@@ -65,6 +65,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
             {
                 var mixer = AnimationMixerPlayable.Create(graph, inputCount);
 
+                // Stamp each clip with a back-ref to this track so BlendTree2DClip.CreatePlayable can reach Motions
+                // and preview the dominant (nearest-neighbor) motion instead of an empty bind pose.
+                foreach (var c in GetClips())
+                    if (c.asset is BlendTree2DClip btc)
+                        btc.EditorPreviewTrack = this;
+
                 var director = go != null ? go.GetComponent<PlayableDirector>() : null;
                 var rawBinding = director != null ? director.GetGenericBinding(this) : null;
                 var animator = rawBinding as Animator ?? (rawBinding as Component)?.GetComponent<Animator>();

@@ -4,6 +4,7 @@ using Rukhanka;
 using Rukhanka.Hybrid;
 using Unity.Collections;
 using Unity.Entities;
+using UnityEditor;
 using UnityEngine;
 using Hash128 = Unity.Entities.Hash128;
 
@@ -33,6 +34,18 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public bool applyFootIK = true;
 
+        [Header("Fallback Blending")]
+        [Tooltip("Override replaces the pose (standard idle). Additive layers the fallback motion on top of lower layers (e.g. breathing/lean overlay). Requires an Additive Reference Pose.")]
+        public AnimationBlendingMode fallbackBlendMode = AnimationBlendingMode.Override;
+
+        [Tooltip("Layer this fallback plays on. 0 = base. Put an Additive overlay on layer >= 1 so it rides on top of a base Override fallback. Additive on layer 0 adds over the bind pose (foot-gun) — use layer >= 1.")]
+        public int fallbackLayerIndex;
+
+        [Tooltip("Base pose subtracted from the fallback clip when Fallback Blend Mode = Additive. Null = the clip's import reference pose / first frame.")]
+        public AnimationClip fallbackAdditiveReferencePoseClip;
+
+        public float fallbackAdditiveReferencePoseTime;
+
         [Header("Inertialization")]
         [Tooltip(
             "Momentum-preserving transition window in seconds. 0 = OFF (exactly the current crossfade-only behavior). " +
@@ -56,6 +69,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var builder = new TimelineAnimationStateBuilder()
                     .WithFallbackOffsets(authoring.positionOffset, Quaternion.Euler(authoring.eulerAnglesOffset),
                         authoring.removeStartOffset, authoring.applyFootIK)
+                    .WithFallbackBlend(authoring.fallbackBlendMode, authoring.fallbackLayerIndex)
                     .WithFallback(default, authoring.blendInDuration, authoring.blendOutDuration,
                         authoring.fallbackPlaybackMode);
 
@@ -106,23 +120,50 @@ namespace BovineLabs.Timeline.Animation.Authoring
             private (Hash128 hash, BlobAssetReference<AnimationClipBlob> blob) BakeFallbackAnimation(
                 TimelineAnimationStateAuthoring authoring, Avatar avatar, Entity entity)
             {
-                var fallbackHash =
-                    BakingUtils.ComputeAnimationHash(authoring.fallbackAnimationClip, avatar, authoring.applyFootIK);
-                var animationBaker = new AnimationClipBaker();
-                singleClipBuffer[0] = authoring.fallbackAnimationClip;
-                var bakedAnimations =
-                    animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject,
-                        authoring.applyFootIK);
-                singleClipBuffer[0] = null;
+                var clip = authoring.fallbackAnimationClip;
 
-                BlobAssetReference<AnimationClipBlob> fallbackBlob = default;
+                // For an Additive fallback, Rukhanka's baker reads the additive reference pose from the clip's own
+                // AnimationClipSettings at bake time (mirrors RukhankaAnimationTrack.ApplyReferencePoseOverrides).
+                // Temporarily write the authored reference pose in, so both ComputeAnimationHash (which folds the
+                // reference pose into the hash) and the actual bake produce a distinct, matching blob. Override
+                // fallbacks never read the reference pose, so their settings are left untouched and their hash is
+                // byte-for-byte unchanged from before.
+                var applyRefPose = authoring.fallbackBlendMode == AnimationBlendingMode.Additive &&
+                                   authoring.fallbackAdditiveReferencePoseClip != null;
+                var originalSettings = default(AnimationClipSettings);
 
-                if (bakedAnimations is { IsCreated: true, Length: > 0 } &&
-                    bakedAnimations[0] != BlobAssetReference<AnimationClipBlob>.Null)
-                    fallbackBlob = bakedAnimations[0];
+                if (applyRefPose)
+                {
+                    originalSettings = AnimationUtility.GetAnimationClipSettings(clip);
+                    var overridden = AnimationUtility.GetAnimationClipSettings(clip);
+                    overridden.additiveReferencePoseClip = authoring.fallbackAdditiveReferencePoseClip;
+                    overridden.additiveReferencePoseTime = authoring.fallbackAdditiveReferencePoseTime;
+                    AnimationUtility.SetAnimationClipSettings(clip, overridden);
+                }
 
-                if (bakedAnimations.IsCreated) bakedAnimations.Dispose();
-                return (fallbackHash, fallbackBlob);
+                try
+                {
+                    var fallbackHash = BakingUtils.ComputeAnimationHash(clip, avatar, authoring.applyFootIK);
+                    var animationBaker = new AnimationClipBaker();
+                    singleClipBuffer[0] = clip;
+                    var bakedAnimations =
+                        animationBaker.BakeAnimations(this, singleClipBuffer, avatar, authoring.gameObject,
+                            authoring.applyFootIK);
+                    singleClipBuffer[0] = null;
+
+                    BlobAssetReference<AnimationClipBlob> fallbackBlob = default;
+
+                    if (bakedAnimations is { IsCreated: true, Length: > 0 } &&
+                        bakedAnimations[0] != BlobAssetReference<AnimationClipBlob>.Null)
+                        fallbackBlob = bakedAnimations[0];
+
+                    if (bakedAnimations.IsCreated) bakedAnimations.Dispose();
+                    return (fallbackHash, fallbackBlob);
+                }
+                finally
+                {
+                    if (applyRefPose) AnimationUtility.SetAnimationClipSettings(clip, originalSettings);
+                }
             }
         }
     }

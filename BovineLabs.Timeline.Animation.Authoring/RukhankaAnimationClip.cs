@@ -51,6 +51,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 asset.clip = animationClipHolder;
                 asset.applyFootIK = applyFootIK;
                 asset.removeStartOffset = removeStartOffset;
+                // Honor the authored offsets so the edit-mode preview matches the baked result and the scene-view
+                // offset handle is truthful.
+                asset.position = positionOffset;
+                asset.rotation = Quaternion.Euler(eulerAnglesOffset);
                 return asset.CreatePlayable(graph, owner);
             }
 

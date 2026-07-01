@@ -67,6 +67,16 @@ namespace BovineLabs.Timeline.Animation.Editor
                 EditorGUI.indentLevel--;
             }
 
+            // D#2: an overlay layer (>= 1) with no effective mask overrides the whole body over the layers below.
+            if (!m_LayerIndex.hasMultipleDifferentValues && m_LayerIndex.intValue >= 1 &&
+                (!m_ApplyAvatarMask.boolValue || m_AvatarMask.objectReferenceValue == null))
+            {
+                EditorGUILayout.HelpBox(
+                    "Layer >= 1 with no Avatar Mask overrides the WHOLE body over the layers below. Assign an Avatar " +
+                    "Mask (and keep Apply Avatar Mask on) so this layer only affects its intended bones.",
+                    MessageType.Warning);
+            }
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Exit / Fallback Override", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(m_ExitIdleClip);
@@ -81,6 +91,17 @@ namespace BovineLabs.Timeline.Animation.Editor
             }
 
             serializedObject.ApplyModifiedProperties();
+        }
+
+        // Scene-view offset handle (authoring aid; runtime bake is final truth). Skipped when trackOffset ignores
+        // offsets (non-ApplyTransformOffsets modes are dropped in DOTS bake).
+        private void OnSceneGUI()
+        {
+            if (target is not RukhankaAnimationTrack track ||
+                track.trackOffset != TrackOffset.ApplyTransformOffsets)
+                return;
+
+            OffsetSceneHandles.DrawForTrack(serializedObject, track);
         }
     }
 }

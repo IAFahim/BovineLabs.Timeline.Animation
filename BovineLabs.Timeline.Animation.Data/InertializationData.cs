@@ -35,9 +35,9 @@ namespace BovineLabs.Timeline.Animation
 
     /// <summary>
     /// Per-bone persistent inertialization state. One element per rig bone (indexed by rig bone index, NOT the
-    /// absolute <c>bonePoseOffset + i</c> packing). Holds the captured offset for the active decay plus a 2-frame
-    /// history of the actually-displayed local pose so a capture always has a valid velocity. The bone buffers are
-    /// not double-buffered, so we keep our own history here.
+    /// absolute <c>bonePoseOffset + i</c> packing). Holds the captured offset for the active decay plus a 3-frame
+    /// history of the actually-displayed local pose so a capture always has a valid velocity AND acceleration (the
+    /// second difference the full quintic needs). The bone buffers are not double-buffered, so we keep our own history.
     /// </summary>
     [InternalBufferCapacity(0)]
     public struct InertializationBoneState : IBufferElementData

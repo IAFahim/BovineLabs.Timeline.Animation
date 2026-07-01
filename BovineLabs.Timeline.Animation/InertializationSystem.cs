@@ -67,6 +67,10 @@ namespace BovineLabs.Timeline.Animation
 
             public float deltaTime;
 
+            // Normalized-time discontinuity (fraction of a clip cycle) above which a same-clip phase jump is treated
+            // as a raw loop seam worth inertializing. A clean full-cycle wrap lands ~0 and stays well under this.
+            private const float PhaseJumpThreshold = 0.05f;
+
             private void Execute(
                 Entity e,
                 in RigDefinitionComponent rigDef,
@@ -100,24 +104,40 @@ namespace BovineLabs.Timeline.Animation
                         {
                             prevDisplayed = pose,
                             prevPrevDisplayed = pose,
+                            prevPrevPrevDisplayed = pose,
                         };
                     }
 
                     inert.active = 0;
                     inert.elapsed = 0f;
                     inert.initialized = 1;
-                    inert.lastDominant = ComputeDominant(atps, out _);
+                    inert.lastDominant = ComputeDominant(atps, out _, out var seedTime);
+                    inert.lastDominantTime = seedTime;
+                    inert.prevDominantTime = seedTime;
                     return;
                 }
 
                 var dt = deltaTime;
 
-                // 1. Dominant = motionId of the highest-weight entry this frame.
-                var dominant = ComputeDominant(atps, out var hasDominant);
+                // 1. Dominant = motionId (and normalized time) of the highest-weight entry this frame.
+                var dominant = ComputeDominant(atps, out var hasDominant, out var dominantTime);
 
-                // 2. Transition? Capture a fresh offset from last frame's displayed history + this frame's target.
+                // 2. Transition? Two triggers: (a) the dominant clip changed, or (b) the SAME clip's phase jumped
+                //    discontinuously (a raw loop seam for a clip not using continuous-loop mode). The phase-jump test
+                //    predicts this frame's phase from last frame's phase + the previous per-frame step, and fires only
+                //    when the actual phase deviates by more than PhaseJumpThreshold — so a clean full-cycle wrap (which
+                //    lands ~exactly on the prediction) does NOT fire.
                 //    dt > 0 guard avoids a divide-by-zero velocity on the very first stepped frame / paused frames.
-                if (hasDominant && dominant != inert.lastDominant && inert.duration > 0f && dt > 0f)
+                bool clipChanged = hasDominant && dominant != inert.lastDominant;
+                bool phaseJump = false;
+                if (hasDominant && dominant == inert.lastDominant && dt > 0f)
+                {
+                    float expectedStep = WrapHalf(inert.lastDominantTime - inert.prevDominantTime);
+                    float discontinuity = WrapHalf(dominantTime - math.frac(inert.lastDominantTime + expectedStep));
+                    phaseJump = math.abs(discontinuity) > PhaseJumpThreshold;
+                }
+
+                if ((clipChanged || phaseJump) && inert.duration > 0f && dt > 0f)
                 {
                     var invDt = 1f / dt;
                     for (var i = 0; i < boneCount; i++)
@@ -139,6 +159,30 @@ namespace BovineLabs.Timeline.Animation
                         var qDelta = math.mul(bs.prevDisplayed.rot, math.inverse(bs.prevPrevDisplayed.rot));
                         ToAngleAxis(qDelta, out var dAxis, out var dAngle);
                         bs.rotVel0 = math.dot(dAxis * (dAngle * invDt), axis);
+
+                        // Acceleration (a0) from a second difference of the displayed history. Position is the direct
+                        // second difference; rotation is the change of angular velocity (projected on the offset axis).
+                        var invDt2 = invDt * invDt;
+                        bs.posAcc0 = (bs.prevDisplayed.pos - 2f * bs.prevPrevDisplayed.pos + bs.prevPrevPrevDisplayed.pos) * invDt2;
+                        var qd1 = math.mul(bs.prevDisplayed.rot, math.inverse(bs.prevPrevDisplayed.rot));
+                        var qd0 = math.mul(bs.prevPrevDisplayed.rot, math.inverse(bs.prevPrevPrevDisplayed.rot));
+                        ToAngleAxis(qd1, out var a1ax, out var a1);
+                        ToAngleAxis(qd0, out var a0ax, out var a0a);
+                        var w1 = math.dot(a1ax * a1, axis) * invDt;
+                        var w0 = math.dot(a0ax * a0a, axis) * invDt;
+                        bs.rotAcc0 = (w1 - w0) * invDt;
+
+                        // Second differences amplify per-frame noise, so clamp a0 to a conservative bound before it can
+                        // spike the quintic's A/B/C coefficients and overshoot. The natural acceleration scale over the
+                        // decay window is ~|v0| / duration; cap each channel to a few times that, with a fixed floor so a
+                        // near-zero v0 still tolerates a modest genuine a0. This is a loose blow-up guard, not a tight fit.
+                        const float accVelScale = 4f;
+                        const float accFloor = 50f;
+                        var invDur = 1f / inert.duration; // duration > 0 guaranteed by the capture condition
+                        var posAccCap = math.max(math.abs(bs.posVel0) * (accVelScale * invDur), accFloor);
+                        bs.posAcc0 = math.clamp(bs.posAcc0, -posAccCap, posAccCap);
+                        var rotAccCap = math.max(math.abs(bs.rotVel0) * (accVelScale * invDur), accFloor);
+                        bs.rotAcc0 = math.clamp(bs.rotAcc0, -rotAccCap, rotAccCap);
 
                         bones[i] = bs;
                     }
@@ -166,11 +210,11 @@ namespace BovineLabs.Timeline.Animation
                     if (applying)
                     {
                         var posOff = new float3(
-                            Quintic(bs.posOffset0.x, bs.posVel0.x, t, duration),
-                            Quintic(bs.posOffset0.y, bs.posVel0.y, t, duration),
-                            Quintic(bs.posOffset0.z, bs.posVel0.z, t, duration));
+                            Quintic(bs.posOffset0.x, bs.posVel0.x, bs.posAcc0.x, t, duration),
+                            Quintic(bs.posOffset0.y, bs.posVel0.y, bs.posAcc0.y, t, duration),
+                            Quintic(bs.posOffset0.z, bs.posVel0.z, bs.posAcc0.z, t, duration));
 
-                        var rotOff = Quintic(bs.rotAngle0, bs.rotVel0, t, duration);
+                        var rotOff = Quintic(bs.rotAngle0, bs.rotVel0, bs.rotAcc0, t, duration);
 
                         displayed.pos = target.pos + posOff;
                         displayed.rot = math.mul(quaternion.AxisAngle(bs.rotAxis, rotOff), target.rot);
@@ -178,6 +222,7 @@ namespace BovineLabs.Timeline.Animation
                         animStream.SetLocalPose(i, displayed);
                     }
 
+                    bs.prevPrevPrevDisplayed = bs.prevPrevDisplayed;
                     bs.prevPrevDisplayed = bs.prevDisplayed;
                     bs.prevDisplayed = displayed;
                     bones[i] = bs;
@@ -188,18 +233,23 @@ namespace BovineLabs.Timeline.Animation
                     inert.elapsed += dt;
                 }
 
-                // 5. Remember this frame's dominant for next-frame transition detection.
+                // 5. Remember this frame's dominant (id + phase) for next-frame transition/phase-jump detection.
                 if (hasDominant)
                 {
+                    inert.prevDominantTime = inert.lastDominantTime;
+                    inert.lastDominantTime = dominantTime;
                     inert.lastDominant = dominant;
                 }
             }
 
-            // motionId of the highest-weight AnimationToProcessComponent entry; hasDominant=false if none contribute.
-            private static uint ComputeDominant(in DynamicBuffer<AnimationToProcessComponent> atps, out bool hasDominant)
+            // motionId (and normalized time) of the highest-weight AnimationToProcessComponent entry; hasDominant=false
+            // if none contribute.
+            private static uint ComputeDominant(
+                in DynamicBuffer<AnimationToProcessComponent> atps, out bool hasDominant, out float dominantTime)
             {
                 hasDominant = false;
                 uint dominant = 0;
+                dominantTime = 0f;
                 var best = 0f;
                 for (var i = 0; i < atps.Length; i++)
                 {
@@ -208,6 +258,7 @@ namespace BovineLabs.Timeline.Animation
                     {
                         best = w;
                         dominant = atps[i].motionId;
+                        dominantTime = atps[i].time;
                         hasDominant = true;
                     }
                 }
@@ -215,9 +266,13 @@ namespace BovineLabs.Timeline.Animation
                 return dominant;
             }
 
-            // Verified quintic closed-form for one scalar channel (a0 = 0). x(0)=x0, x'(0)=v0, x(T)=x'(T)=x''(T)=0.
+            // Wraps a normalized-time delta into [-0.5, 0.5] so a clip's phase difference is measured the short way
+            // around the loop (a +0.98 step and a -0.02 step read the same). Used only by the phase-jump detector.
+            private static float WrapHalf(float x) => x - math.round(x);
+
+            // Full Bollo quintic closed-form for one scalar channel. x(0)=x0, x'(0)=v0, x''(0)=a0; x(T)=x'(T)=x''(T)=0.
             // Per-channel overshoot guard shortens the effective window when the offset is already closing on zero.
-            private static float Quintic(float x0, float v0, float t, float duration)
+            private static float Quintic(float x0, float v0, float a0, float t, float duration)
             {
                 var teff = duration;
                 if (math.abs(v0) > 1e-9f)
@@ -239,16 +294,16 @@ namespace BovineLabs.Timeline.Animation
                 var t4 = t3 * teff;
                 var t5 = t4 * teff;
 
-                var a = -(6f * v0 * teff + 12f * x0) / (2f * t5);
-                var b = (16f * v0 * teff + 30f * x0) / (2f * t4);
-                var c = -(12f * v0 * teff + 20f * x0) / (2f * t3);
+                var A = -(a0 * t2 + 6f * v0 * teff + 12f * x0) / (2f * t5);
+                var B = (3f * a0 * t2 + 16f * v0 * teff + 30f * x0) / (2f * t4);
+                var C = -(3f * a0 * t2 + 12f * v0 * teff + 20f * x0) / (2f * t3);
 
                 var p2 = t * t;
                 var p3 = p2 * t;
                 var p4 = p3 * t;
                 var p5 = p4 * t;
 
-                return (a * p5) + (b * p4) + (c * p3) + (v0 * t) + x0;
+                return (A * p5) + (B * p4) + (C * p3) + (a0 * 0.5f * p2) + (v0 * t) + x0;
             }
 
             // Quaternion -> shortest-arc angle (>= 0) about a unit axis. Mirrors Unity's ToAngleAxis semantics.

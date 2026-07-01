@@ -72,6 +72,13 @@ namespace BovineLabs.Timeline.Animation.Editor
             }
         }
 
+        // Scene-view offset handle (authoring aid; runtime bake is final truth). Gated to edit mode + a resolvable
+        // bound Animator inside OffsetSceneHandles.
+        private void OnSceneGUI()
+        {
+            OffsetSceneHandles.DrawForClip(serializedObject, target);
+        }
+
         private void MatchSelectedClips(bool resetPlayback)
         {
             for (var i = 0; i < targets.Length; i++)

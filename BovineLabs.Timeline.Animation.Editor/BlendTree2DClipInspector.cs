@@ -60,7 +60,19 @@ namespace BovineLabs.Timeline.Animation.Editor
             EditorGUILayout.PropertyField(m_ApplyFootIK, new GUIContent("Foot IK"));
             EditorGUI.indentLevel--;
 
+            EditorGUILayout.Space();
+            EditorGUILayout.HelpBox(
+                "Edit-mode preview shows the single dominant motion at the sample point, not the full blend — trust runtime for the blended result.",
+                MessageType.Info);
+
             serializedObject.ApplyModifiedProperties();
+        }
+
+        // Scene-view offset handle (authoring aid; runtime bake is final truth). Gated to edit mode + a resolvable
+        // bound Animator inside OffsetSceneHandles.
+        private void OnSceneGUI()
+        {
+            OffsetSceneHandles.DrawForClip(serializedObject, target);
         }
     }
 }
