@@ -26,6 +26,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public bool applyFootIK = true;
 
+        [Tooltip("Loop this clip on a free-running phase (advances by its own speed, never resets when the timeline wraps) so a looping locomotion clip never snaps mid-stride regardless of timeline duration. Leave OFF for one-shot clips that must track/scrub the timeline exactly.")]
+        public bool continuousLoop;
+
         [Header("Additive Reference Pose")]
         [Tooltip(
             "Base pose subtracted from this clip when the TRACK's Blend Mode is Additive (recoil/breathing/lean on top of lower layers). Leave null to keep current behavior: the clip's own import-settings reference pose, or its first frame if it has none. Ignored when the track's Blend Mode is Override.")]
@@ -75,7 +78,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     PositionOffset = positionOffset,
                     RotationOffset = Quaternion.Euler(eulerAnglesOffset),
                     RemoveStartOffset = removeStartOffset,
-                    ApplyFootIK = applyFootIK
+                    ApplyFootIK = applyFootIK,
+                    ContinuousLoop = continuousLoop
                 };
 
                 var commands = new BakerCommands(context.Baker, clipEntity);

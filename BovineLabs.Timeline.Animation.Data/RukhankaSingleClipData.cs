@@ -15,5 +15,6 @@ namespace BovineLabs.Timeline.Animation
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
         public bool ApplyFootIK;
+        public bool ContinuousLoop;
     }
 }

@@ -44,10 +44,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
             "Animation clip to play as fallback when no timeline clips are active on this track's target. Overrides the default fallback set on TimelineAnimationStateAuthoring.")]
         public AnimationClip ExitIdleClip;
 
-        [Tooltip("Time in seconds to blend into this fallback clip.")] [Min(0.001f)]
+        [Tooltip("Time in seconds to blend into this fallback clip. 0 = instant cut.")] [Min(0f)]
         public float BlendInDuration = 0.25f;
 
-        [Tooltip("Time in seconds to blend out of this fallback clip.")] [Min(0.001f)]
+        [Tooltip("Time in seconds to blend out of this fallback clip. 0 = instant cut.")] [Min(0f)]
         public float BlendOutDuration = 0.25f;
 
         [Tooltip("How the fallback animation wraps.")]
@@ -152,8 +152,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 {
                     FallbackClipHash = BakingUtils.ComputeAnimationHash(ExitIdleClip, avatar),
                     TrackOrder = FallbackTrackOrder.Compute(this),
-                    BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
-                    BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
+                    BlendInSpeed = BlendLayerMath.DurationToSpeed(BlendInDuration),
+                    BlendOutSpeed = BlendLayerMath.DurationToSpeed(BlendOutDuration),
                     PlaybackMode = FallbackPlaybackMode,
                     LayerIndex = LayerIndex,
                     BlendMode = AnimationBlendingMode.Override,

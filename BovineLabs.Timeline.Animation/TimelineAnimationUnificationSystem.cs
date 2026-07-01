@@ -71,7 +71,7 @@ namespace BovineLabs.Timeline.Animation
             {
                 atps.Clear();
 
-                ReconcileRequests(ref blendEntries, ref smoothEntries);
+                ReconcileRequests(ref blendEntries, ref smoothEntries, IsScrubbing);
                 IntegrateWeights(ref smoothEntries, fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
 
                 var baseLayer = fallbackData.LayerIndex;
@@ -89,7 +89,8 @@ namespace BovineLabs.Timeline.Animation
 
             private static void ReconcileRequests(
                 ref DynamicBuffer<BlendGroupEntry> blendEntries,
-                ref DynamicBuffer<SmoothBlendGroupEntry> smoothEntries)
+                ref DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
+                bool isScrubbing)
             {
                 for (var i = 0; i < smoothEntries.Length; i++)
                 {
@@ -114,7 +115,23 @@ namespace BovineLabs.Timeline.Animation
                     {
                         var s = smoothEntries[smoothIndex];
                         s.TargetWeight = request.Weight;
-                        s.NormalizedTime = request.NormalizedTime;
+                        s.ContinuousLoop = request.ContinuousLoop;
+                        s.PhaseVelocity = request.PhaseVelocity;
+
+                        // Continuous-loop entries free-run their own phase (advanced in IntegrateWeights) and must
+                        // NOT be re-synced to the wrapping timeline localTime, otherwise the seam snaps back. We
+                        // still take the request's NormalizedTime while scrubbing (scrub must land exactly), or the
+                        // very first time to seed the phase. Non-continuous entries track localTime exactly, as before.
+                        if (!s.ContinuousLoop || isScrubbing)
+                        {
+                            s.NormalizedTime = request.NormalizedTime;
+                        }
+                        else if (!s.PhaseSeeded)
+                        {
+                            s.NormalizedTime = request.NormalizedTime;
+                            s.PhaseSeeded = true;
+                        }
+
                         s.LayerIndex = request.LayerIndex;
                         s.BlendMode = request.BlendMode;
                         s.AvatarMaskHash = request.AvatarMaskHash;
@@ -143,7 +160,13 @@ namespace BovineLabs.Timeline.Animation
                             PositionOffset = request.PositionOffset,
                             RotationOffset = request.RotationOffset,
                             RemoveStartOffset = request.RemoveStartOffset,
-                            ApplyFootIK = request.ApplyFootIK
+                            ApplyFootIK = request.ApplyFootIK,
+
+                            // Seed the free-run phase from the request on first appearance; a continuous entry is
+                            // considered seeded immediately so subsequent frames own NormalizedTime themselves.
+                            ContinuousLoop = request.ContinuousLoop,
+                            PhaseVelocity = request.PhaseVelocity,
+                            PhaseSeeded = request.ContinuousLoop
                         });
                     }
                 }
@@ -182,7 +205,15 @@ namespace BovineLabs.Timeline.Animation
                         continue;
                     }
 
-                    if (s.TargetWeight <= WeightEpsilon && hasClip)
+                    if (s.ContinuousLoop)
+                    {
+                        // Continuous-phase loop: advance this entry's OWN phase by PhaseVelocity (cycles/sec) every
+                        // frame and never read the wrapping timeline localTime, so the loop seam is invisible
+                        // regardless of timeline duration. Runs whether rising, held, or fading out.
+                        var adv = (IsScrubbing ? 0f : DeltaTime) * s.PhaseVelocity;
+                        s.NormalizedTime = math.frac(s.NormalizedTime + adv);
+                    }
+                    else if (s.TargetWeight <= WeightEpsilon && hasClip)
                     {
                         var advance = (IsScrubbing ? 0f : DeltaTime) / clipLen;
                         s.NormalizedTime = clipBlob.Value.looped

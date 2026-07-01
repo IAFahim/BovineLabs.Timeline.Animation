@@ -14,6 +14,7 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
         public bool ApplyFootIK;
+        public bool ContinuousLoop;
 
         public void ApplyTo<T>(ref T builder)
             where T : struct, IEntityCommands
@@ -26,7 +27,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 PositionOffset = PositionOffset,
                 RotationOffset = RotationOffset,
                 RemoveStartOffset = RemoveStartOffset,
-                ApplyFootIK = ApplyFootIK
+                ApplyFootIK = ApplyFootIK,
+                ContinuousLoop = ContinuousLoop
             });
         }
     }

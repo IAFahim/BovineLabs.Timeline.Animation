@@ -23,6 +23,12 @@ namespace BovineLabs.Timeline.Animation
         /// <summary>motionId of last frame's dominant (highest-weight) entry; the transition detector.</summary>
         public uint lastDominant;
 
+        /// <summary>Normalized [0,1) clip time of last frame's dominant entry; used to detect same-clip phase jumps (raw loop seams).</summary>
+        public float lastDominantTime;
+
+        /// <summary>Normalized [0,1) clip time of the dominant entry two frames ago; gives the expected per-frame phase step.</summary>
+        public float prevDominantTime;
+
         /// <summary>0 until the per-bone history/buffer has been initialized for this rig (first frame seeds it).</summary>
         public byte initialized;
     }
@@ -36,17 +42,20 @@ namespace BovineLabs.Timeline.Animation
     [InternalBufferCapacity(0)]
     public struct InertializationBoneState : IBufferElementData
     {
-        // Position channel: captured offset (x0) and its velocity (v0). a0 = 0 for v1.
+        // Position channel: captured offset (x0), velocity (v0) and acceleration (a0) for the full Bollo quintic.
         public float3 posOffset0;
         public float3 posVel0;
+        public float3 posAcc0;
 
-        // Rotation channel: the offset reduced to a scalar angle about a fixed axis. a0 = 0 for v1.
+        // Rotation channel: the offset reduced to a scalar angle about a fixed axis, with velocity and acceleration.
         public float3 rotAxis;
         public float rotAngle0;
         public float rotVel0;
+        public float rotAcc0;
 
-        // 2-frame history of the actually-displayed local pose.
+        // 3-frame history of the actually-displayed local pose (a0 needs a second difference => three samples).
         public BoneTransform prevDisplayed;
         public BoneTransform prevPrevDisplayed;
+        public BoneTransform prevPrevPrevDisplayed;
     }
 }

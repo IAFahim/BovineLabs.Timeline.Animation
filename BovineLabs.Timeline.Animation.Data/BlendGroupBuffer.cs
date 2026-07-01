@@ -20,6 +20,12 @@ namespace BovineLabs.Timeline.Animation
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
         public bool ApplyFootIK;
+
+        // Continuous-phase loop mode: when true this entry advances its own NormalizedTime by PhaseVelocity
+        // (cycles/sec) each frame instead of reading the wrapping timeline localTime, so a looping clip never
+        // snaps mid-cycle when the PlayableDirector wraps at the timeline duration. Default false = current behavior.
+        public bool ContinuousLoop;
+        public float PhaseVelocity;
     }
 
     [InternalBufferCapacity(0)]
@@ -38,6 +44,13 @@ namespace BovineLabs.Timeline.Animation
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
         public bool ApplyFootIK;
+
+        // Continuous-phase loop mode. PhaseSeeded tracks whether NormalizedTime has been initialized from the
+        // first request; once seeded, the free-run advance owns NormalizedTime (never re-synced to the wrapping
+        // localTime) unless scrubbing.
+        public bool ContinuousLoop;
+        public float PhaseVelocity;
+        public bool PhaseSeeded;
     }
 
     public struct BlendGroupTimer : IComponentData, IEnableableComponent

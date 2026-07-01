@@ -54,9 +54,10 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
 
         // A duration of 0 (or below the floor) means "no global smoothing" - encoded as speed 0, the
         // instant-snap sentinel IntegrateWeights expects. Only a strictly positive duration smooths.
+        // Delegates to the shared BlendLayerMath.DurationToSpeed sentinel so every path snaps identically.
         private static float DurationToSpeed(float duration)
         {
-            return duration > MinDuration ? 1f / duration : 0f;
+            return BlendLayerMath.DurationToSpeed(duration);
         }
 
         public TimelineAnimationStateBuilder WithFallbackOffsets(float3 pos, quaternion rot, bool removeStart,

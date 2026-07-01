@@ -94,7 +94,7 @@ namespace BovineLabs.Timeline.Animation
             public NativeParallelMultiHashMap<Entity, BlendGroupEntry>.ParallelWriter ActiveAnimations;
 
             private void Execute(Entity clipEntity, in RukhankaSingleClipData clipData, in TrackBinding binding,
-                in Clip clip, in LocalTime localTime)
+                in Clip clip, in LocalTime localTime, in TimeTransform timeTransform)
             {
                 if (!TrackDataLookup.TryGetComponent(clip.Track, out var trackData)) return;
 
@@ -128,7 +128,14 @@ namespace BovineLabs.Timeline.Animation
                     PositionOffset = finalPosOffset,
                     RotationOffset = finalRotOffset,
                     RemoveStartOffset = clipData.RemoveStartOffset,
-                    ApplyFootIK = clipData.ApplyFootIK
+                    ApplyFootIK = clipData.ApplyFootIK,
+
+                    // Continuous-phase loop mode. PhaseVelocity is cycles/sec = the clip's timeline speed
+                    // multiplier (TimeTransform.Scale) divided by the clip length in seconds (duration). The
+                    // unification system free-runs NormalizedTime by this each frame instead of reading the
+                    // wrapping localTime, so the loop seam is invisible regardless of timeline duration.
+                    ContinuousLoop = clipData.ContinuousLoop,
+                    PhaseVelocity = (float)(timeTransform.Scale / duration)
                 });
             }
         }

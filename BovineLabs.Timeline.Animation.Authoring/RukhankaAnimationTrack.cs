@@ -50,10 +50,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
             "Idle/fallback clip this track latches when it is the dominant active track. Lets a stance track own the idle so movement falls back to its idle, not the default idle. Highest LayerIndex wins among simultaneously active overrides; the latch persists until another override track takes over.")]
         public AnimationClip ExitIdleClip;
 
-        [Tooltip("Time in seconds to blend into this fallback clip.")] [Min(0.001f)]
+        [Tooltip("Time in seconds to blend into this fallback clip. 0 = instant cut.")] [Min(0f)]
         public float BlendInDuration = 0.25f;
 
-        [Tooltip("Time in seconds to blend out of this fallback clip.")] [Min(0.001f)]
+        [Tooltip("Time in seconds to blend out of this fallback clip. 0 = instant cut.")] [Min(0f)]
         public float BlendOutDuration = 0.25f;
 
         [Tooltip("How the fallback animation wraps.")]
@@ -265,8 +265,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
             {
                 FallbackClipHash = exitIdleHash,
                 TrackOrder = FallbackTrackOrder.Compute(this),
-                BlendInSpeed = 1f / Mathf.Max(0.001f, BlendInDuration),
-                BlendOutSpeed = 1f / Mathf.Max(0.001f, BlendOutDuration),
+                BlendInSpeed = BlendLayerMath.DurationToSpeed(BlendInDuration),
+                BlendOutSpeed = BlendLayerMath.DurationToSpeed(BlendOutDuration),
                 PlaybackMode = FallbackPlaybackMode,
                 LayerIndex = LayerIndex,
                 BlendMode = BlendMode,
