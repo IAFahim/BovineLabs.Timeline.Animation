@@ -247,6 +247,14 @@ namespace BovineLabs.Timeline.Animation
                     aim.angleLimits = new float2(minA, maxA);
                     AimIKLookup[lookAtTarget.AimIKEntity] = aim;
                 }
+                else if (!MissingRigWarned.Value)
+                {
+                    // CharacterLookAtTarget is baked unconditionally, so the absent-rig warning above never
+                    // fires when only the AimIK half is missing. Surface it here instead of silently no-opping.
+                    MissingRigWarned.Value = true;
+                    Logger.LogWarning512(
+                        "[CharacterLookAt] A look-at clip is active but the bound character's look-at rig is not built (no AimIK on the head bone — run Build Look-At Rig). Look-at will be skipped.");
+                }
             }
         }
     }
