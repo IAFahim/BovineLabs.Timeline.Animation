@@ -28,6 +28,7 @@ namespace BovineLabs.Timeline.Animation
             public float AbsoluteTime;
 
             public float Weight;
+            public float TimeScale;
 
             public float3 PositionOffset;
             public quaternion RotationOffset;
@@ -126,7 +127,7 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public ComponentLookup<ClipWeight> ClipWeightLookup;
 
             private void Execute(Entity clipEntity, in BlendTreeDirectClipData clipData,
-                in TrackBinding binding, in LocalTime localTime)
+                in TrackBinding binding, in LocalTime localTime, in TimeTransform timeTransform)
             {
                 var weight = 1f;
                 if (ClipWeightLookup.TryGetComponent(clipEntity, out var cw))
@@ -140,6 +141,7 @@ namespace BovineLabs.Timeline.Animation
                 {
                     Track = track,
                     AbsoluteTime = (float)(double)localTime.Value,
+                    TimeScale = (float)timeTransform.Scale,
                     Weight = weight,
                     PositionOffset = clipData.PositionOffset,
                     RotationOffset = clipData.RotationOffset,
@@ -238,6 +240,7 @@ namespace BovineLabs.Timeline.Animation
                 {
                     blend.BestWeight = clipData.Weight;
                     blend.AbsoluteTime = clipData.AbsoluteTime;
+                    blend.TimeScale = clipData.TimeScale;
                     blend.PositionOffset = clipData.PositionOffset;
                     blend.RotationOffset = clipData.RotationOffset;
                     blend.RemoveStartOffset = clipData.RemoveStartOffset;
@@ -389,7 +392,8 @@ namespace BovineLabs.Timeline.Animation
                 if (totalBlendWeight > 0f) weightedDuration /= totalBlendWeight;
                 if (weightedDuration <= MinDuration) weightedDuration = 1f;
 
-                var normalizedTime = ComputeNormalizedTime(targetEntity, trackEntity, absoluteTime, weightedDuration);
+                var normalizedTime =
+                    ComputeNormalizedTime(targetEntity, trackEntity, absoluteTime, weightedDuration, blend.TimeScale);
 
                 var avatarMaskHash = trackData.ApplyAvatarMask ? trackData.AvatarMaskHash : default;
                 var finalPosOffset = trackData.TrackPositionOffset +
@@ -431,7 +435,7 @@ namespace BovineLabs.Timeline.Animation
             }
 
             private float ComputeNormalizedTime(Entity targetEntity, Entity trackEntity, float absoluteTime,
-                float weightedDuration)
+                float weightedDuration, float timeScale)
             {
                 var normalizedTime = 0f;
 
@@ -465,7 +469,7 @@ namespace BovineLabs.Timeline.Animation
                     else
                     {
                         var delta = absoluteTime - ps.PreviousAbsoluteTime;
-                        if (!IsScrubbing && math.abs(delta) > 1.0f) delta = GlobalDeltaTime;
+                        if (!IsScrubbing) delta = BlendTreePhaseMath.PlayingDelta(delta, GlobalDeltaTime * timeScale);
                         ps.AccumulatedTime += delta / weightedDuration;
                         ps.PreviousAbsoluteTime = absoluteTime;
                         normalizedTime = math.frac(ps.AccumulatedTime);
@@ -529,6 +533,7 @@ namespace BovineLabs.Timeline.Animation
             public float TotalWeight;
             public float BestWeight;
             public float AbsoluteTime;
+            public float TimeScale;
             public float3 PositionOffset;
             public quaternion RotationOffset;
             public bool RemoveStartOffset;
