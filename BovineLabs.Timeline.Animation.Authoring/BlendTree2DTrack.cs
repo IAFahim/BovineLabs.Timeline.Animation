@@ -113,6 +113,14 @@ namespace BovineLabs.Timeline.Animation.Authoring
             var trackEntity = context.TrackEntity;
             var avatar = rigDef.GetAvatar();
 
+            if (avatar == null)
+            {
+                Debug.LogWarning(
+                    $"[BlendTree2DTrack] '{name}' rig '{rigDef.name}' has no Avatar — animation data will not be baked.");
+                base.Bake(context);
+                return;
+            }
+
             Hash128 avatarMaskHash = default;
             if (applyAvatarMask && avatarMask != null)
             {

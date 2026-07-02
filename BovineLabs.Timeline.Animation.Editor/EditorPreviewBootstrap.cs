@@ -58,8 +58,13 @@ namespace BovineLabs.Timeline.Animation.Editor
             {
                 World.GetOrCreateSystem<DisableAnimationCullingInEditorSystem>(),
                 World.GetOrCreateSystem<TimelineAnimationBlendTree2DTrackSystem>(),
+                World.GetOrCreateSystem<TimelineAnimationBlendTree1DTrackSystem>(),
+                World.GetOrCreateSystem<TimelineAnimationBlendTreeDirectTrackSystem>(),
+                World.GetOrCreateSystem<TimelineLayerWeightTrackSystem>(),
+                World.GetOrCreateSystem<TimelineFallbackOverrideSystem>(),
                 World.GetOrCreateSystem<TimelineSingleAnimationTrackSystem>(),
                 World.GetOrCreateSystem<TimelineAnimationUnificationSystem>(),
+                World.GetOrCreateSystem<CharacterLookAtTrackSystem>(),
 
                 World.GetOrCreateSystem<EditorRukhankaRunnerGroup>()
             };

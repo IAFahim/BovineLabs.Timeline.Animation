@@ -1,5 +1,6 @@
 using Unity.Entities;
 using UnityEngine;
+using Rukhanka.Hybrid;
 
 namespace BovineLabs.Timeline.Animation.Authoring
 {

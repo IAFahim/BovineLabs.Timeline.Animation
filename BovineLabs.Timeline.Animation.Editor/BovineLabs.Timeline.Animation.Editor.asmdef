@@ -13,6 +13,8 @@
     "BovineLabs.Timeline",
     "BovineLabs.Timeline.Authoring",
     "BovineLabs.Timeline.Data",
+    "BovineLabs.Reaction.Data",
+    "BovineLabs.Timeline.EntityLinks.Data",
     "Unity.Burst",
     "Unity.Collections",
     "Unity.Entities",
