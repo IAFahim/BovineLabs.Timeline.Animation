@@ -22,6 +22,12 @@ namespace BovineLabs.Timeline.Animation
 
         public float MaxSpeed;
 
+        // Optional: multiply MaxSpeed by this stat's value (resolved via link from the track binding, exactly like
+        // ReadKind's velocity ReadFrom). Lets a MovementSpeed stat drive the blend normalization so it tracks the
+        // real, stat-scaled top speed instead of a hardcoded constant. Stat.Value == 0 means "no stat, use MaxSpeed".
+        public BovineLabs.Essence.Data.StatKey MaxSpeedStat;
+        public ushort MaxSpeedStatLinkKey;
+
         public float3 PositionOffset;
         public quaternion RotationOffset;
         public bool RemoveStartOffset;

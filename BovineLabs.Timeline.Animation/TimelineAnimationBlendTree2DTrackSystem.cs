@@ -3,6 +3,7 @@ using BovineLabs.Core;
 using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
+using BovineLabs.Essence.Data;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
@@ -92,7 +93,8 @@ namespace BovineLabs.Timeline.Animation
                 PlayerMoveInputLookup = SystemAPI.GetComponentLookup<PlayerMoveInput>(true),
                 EntityLinkSourceLookup = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
                 EntityLinkEntryLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true),
-                TrackBindingLookup = SystemAPI.GetComponentLookup<TrackBinding>(true)
+                TrackBindingLookup = SystemAPI.GetComponentLookup<TrackBinding>(true),
+                StatLookup = SystemAPI.GetBufferLookup<Stat>(true)
             }.ScheduleParallel(state.Dependency);
 
             var clipCount = SystemAPI.QueryBuilder()
@@ -146,6 +148,7 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> EntityLinkSourceLookup;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> EntityLinkEntryLookup;
             [ReadOnly] public ComponentLookup<TrackBinding> TrackBindingLookup;
+            [ReadOnly] public BufferLookup<Stat> StatLookup;
 
             private void Execute(Entity clipEntity, ref BlendTree2DDirectionClipData clipData)
             {
@@ -175,8 +178,31 @@ namespace BovineLabs.Timeline.Animation
                             ? quaternion.LookRotationSafe(new float3(ltw.Forward.x, 0f, ltw.Forward.z), math.up())
                             : quaternion.identity;
                         var localVelocity = math.rotate(math.inverse(facing), worldVelocity);
+
+                        // Optional stat scale: maxSpeed *= MovementSpeed stat (resolved via link from the binding,
+                        // like the velocity ReadFrom). Keeps the blend normalization tracking the real top speed.
+                        var maxSpeed = clipData.MaxSpeed;
+                        if (clipData.MaxSpeedStat.Value != 0)
+                        {
+                            var statEntity = Entity.Null;
+                            if (clipData.MaxSpeedStatLinkKey == 0)
+                            {
+                                statEntity = binding.Value;
+                            }
+                            else if (!EntityLinkResolver.TryResolve(binding.Value, clipData.MaxSpeedStatLinkKey,
+                                         EntityLinkSourceLookup, EntityLinkEntryLookup, out statEntity))
+                            {
+                                statEntity = Entity.Null;
+                            }
+
+                            if (statEntity != Entity.Null && StatLookup.TryGetBuffer(statEntity, out var stats))
+                            {
+                                maxSpeed *= stats.AsMap().GetValueFloat(clipData.MaxSpeedStat, 1f);
+                            }
+                        }
+
                         var speedFraction = new float2(localVelocity.x, localVelocity.z) /
-                                            math.max(DirectionEpsilon, clipData.MaxSpeed);
+                                            math.max(DirectionEpsilon, maxSpeed);
                         var radius = math.length(speedFraction);
                         clipData.Value = radius > 1f ? speedFraction / radius : speedFraction;
                     }

@@ -9,6 +9,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
         public BlendDirectionReadKind ReadKind;
         public ushort ReadLinkKey;
         public float MaxSpeed;
+        public BovineLabs.Essence.Data.StatKey MaxSpeedStat;
+        public ushort MaxSpeedStatLinkKey;
         public float3 PositionOffset;
         public quaternion RotationOffset;
         public bool RemoveStartOffset;
@@ -23,6 +25,8 @@ namespace BovineLabs.Timeline.Animation.Data.Builders
                 ReadKind = ReadKind,
                 ReadLinkKey = ReadLinkKey,
                 MaxSpeed = MaxSpeed,
+                MaxSpeedStat = MaxSpeedStat,
+                MaxSpeedStatLinkKey = MaxSpeedStatLinkKey,
                 PositionOffset = PositionOffset,
                 RotationOffset = RotationOffset,
                 RemoveStartOffset = RemoveStartOffset,
