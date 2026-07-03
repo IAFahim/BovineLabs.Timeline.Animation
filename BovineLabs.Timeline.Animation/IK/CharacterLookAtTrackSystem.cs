@@ -129,8 +129,7 @@ namespace BovineLabs.Timeline.Animation
                     case PointSourceMode.LinkedTarget:
                         if (bindingEntity != Entity.Null &&
                             TargetsLookup.TryGetComponent(bindingEntity, out var targets) &&
-                            EntityLinkResolver.TryResolve(bindingEntity, targets, data.ReadRootFrom, data.TargetLinkKey,
-                                Sources, Entries, out var resolved) &&
+                            data.Target.TryResolve(bindingEntity, targets, Sources, Entries, out var resolved) &&
                             LtwLookup.TryGetComponent(resolved, out var resolvedLtw))
                         {
                             point = LocalTransform.FromMatrix(resolvedLtw.Value).Position;
@@ -158,8 +157,7 @@ namespace BovineLabs.Timeline.Animation
                     AngleLimits = data.AngleLimits,
                     SourceMode = PointSourceMode.StaticWorld,
                     StaticOrOffsetPoint = point,
-                    TargetLinkKey = 0,
-                    ReadRootFrom = default
+                    Target = default
                 };
             }
         }

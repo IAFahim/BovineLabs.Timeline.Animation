@@ -9,6 +9,7 @@
         "BovineLabs.Timeline.Authoring",
         "BovineLabs.Timeline.Core.Authoring",
         "BovineLabs.Timeline.EntityLinks.Authoring",
+        "BovineLabs.Timeline.EntityLinks.Data",
         "BovineLabs.Timeline.Animation",
         "BovineLabs.Timeline.Animation.Data",
         "BovineLabs.Timeline.Data",

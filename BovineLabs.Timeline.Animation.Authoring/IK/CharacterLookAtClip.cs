@@ -12,6 +12,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
 {
     public class CharacterLookAtClip : DOTSClip, ITimelineClipAsset
     {
+        [Tooltip("Link to the entity to look at (LinkedTarget mode).")]
+        public EntityLinkSchema lookTargetLink;
+
         [Header("Source")]
         [Tooltip(
             "Where the look-at point comes from. LinkedTarget resolves an EntityLink; StaticWorld uses a fixed world point; OwnerOffset offsets the bound character.")]
@@ -19,9 +22,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         [Tooltip("Which target slot to read the link root from when resolving LinkedTarget.")]
         public Target readRootFrom = Target.Self;
-
-        [Tooltip("Link to the entity to look at (LinkedTarget mode).")]
-        public EntityLinkSchema lookTargetLink;
 
         [Header("Static / Offset")] [Tooltip("World point to look at (StaticWorld mode).")]
         public Vector3 staticWorldPoint;
@@ -42,11 +42,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
         {
             var commands = new BakerCommands(context.Baker, clipEntity);
 
-            ushort key = 0;
-            if (lookTargetLink != null && EntityLinkAuthoringUtility.TryGetKey(lookTargetLink, out var k))
-                key = k;
+            var lookTarget = EntityLinkAuthoringUtility.BakeRef(context.Baker, lookTargetLink, readRootFrom);
 
-            if (sourceMode == PointSourceMode.LinkedTarget && key == 0)
+            if (sourceMode == PointSourceMode.LinkedTarget && lookTarget.LinkKey == 0)
                 Debug.LogError(
                     $"{nameof(CharacterLookAtClip)} '{name}' uses LinkedTarget but lookTargetLink is unassigned or unresolved; the look-at will do nothing.",
                     this);
@@ -66,8 +64,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     Weight = weight,
                     AngleLimits = math.radians(new float2(angleLimitMin, angleLimitMax)),
                     SourceMode = sourceMode,
-                    TargetLinkKey = key,
-                    ReadRootFrom = readRootFrom,
+                    Target = lookTarget,
                     StaticOrOffsetPoint = staticOrOffset
                 }
             };

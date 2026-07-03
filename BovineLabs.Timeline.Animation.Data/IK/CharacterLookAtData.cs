@@ -1,5 +1,6 @@
 using BovineLabs.Reaction.Data.Core;
 using BovineLabs.Timeline.Data;
+using BovineLabs.Timeline.EntityLinks.Data;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Properties;
@@ -19,8 +20,7 @@ namespace BovineLabs.Timeline.Animation
         public float Weight;
         public float2 AngleLimits;
         public PointSourceMode SourceMode;
-        public ushort TargetLinkKey;
-        public Target ReadRootFrom;
+        public EntityLinkRef Target;
         public float3 StaticOrOffsetPoint;
     }
 
@@ -54,8 +54,7 @@ namespace BovineLabs.Timeline.Animation
                 AngleLimits = math.lerp(a.AngleLimits, b.AngleLimits, s),
                 SourceMode = PointSourceMode.StaticWorld,
                 StaticOrOffsetPoint = point,
-                TargetLinkKey = 0,
-                ReadRootFrom = default
+                Target = default
             };
         }
 
@@ -73,8 +72,7 @@ namespace BovineLabs.Timeline.Animation
                 AngleLimits = a.AngleLimits,
                 SourceMode = PointSourceMode.StaticWorld,
                 StaticOrOffsetPoint = point,
-                TargetLinkKey = 0,
-                ReadRootFrom = default
+                Target = default
             };
         }
     }

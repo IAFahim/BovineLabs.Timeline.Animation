@@ -5,6 +5,7 @@
         "BovineLabs.Core",
         "BovineLabs.Timeline",
         "BovineLabs.Timeline.Data",
+        "BovineLabs.Timeline.EntityLinks.Data",
         "BovineLabs.Reaction.Data",
         "Unity.Burst",
         "Unity.Collections",
