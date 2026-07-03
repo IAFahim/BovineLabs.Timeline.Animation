@@ -1,5 +1,4 @@
 using BovineLabs.Core.Authoring.EntityCommands;
-using BovineLabs.Essence.Authoring;
 using BovineLabs.Timeline.Animation.Data.Builders;
 using BovineLabs.Timeline.Authoring;
 using BovineLabs.Timeline.EntityLinks.Authoring;
@@ -18,21 +17,13 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public BlendDirectionReadKind ReadKind;
         public EntityLinkSchema ReadFrom;
 
-        [Tooltip(
-            "Speed (m/s) mapped to the outer edge of the blend space when ReadKind reads physics velocity. " +
-            "Velocity is rotated into the character's facing and divided by this, so radius 0 = idle and radius 1 = this speed.")]
-        [Min(0.001f)]
-        public float maxSpeed = 5f;
-
-        [Header("Max Speed Stat (optional)")]
-        [Tooltip("If set, maxSpeed is multiplied by this stat's value (e.g. a MovementSpeed stat). Point this and the " +
-                 "movement force at the same stat so the achievable speed and the blend normalization scale together — " +
-                 "then buffs/slows rescale both and the blend never desyncs. Leave empty to use the constant maxSpeed.")]
-        public StatSchemaObject maxSpeedStat;
-
-        [Tooltip("Entity link that resolves the entity carrying the Max Speed Stat (e.g. Essence Link). Empty = read it " +
-                 "from the bound entity itself.")]
-        public EntityLinkSchema maxSpeedReadFrom;
+        [Tooltip("Blend relative to the main camera's ground projection, like AxisTransform's Camera Relative. " +
+                 "Player Move Input: the stick is read as camera-relative and expressed in the character's facing so " +
+                 "the right directional anim plays while the body steers camera-relative. Physics Velocity: the blend " +
+                 "is measured in the camera frame instead of the character facing (screen-relative locomotion). " +
+                 "No effect on Clip Value, or when there is no main camera. The camera basis is computed once per " +
+                 "frame and shared by every camera-relative clip.")]
+        public bool cameraRelative;
 
         [Header("Clip Transform Offsets")] public Vector3 positionOffset = Vector3.zero;
 
@@ -124,20 +115,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 readLinkKey = key;
             }
 
-            ushort maxSpeedStatLinkKey = 0;
-            if (maxSpeedReadFrom != null)
-            {
-                EntityLinkAuthoringUtility.TryGetKey(maxSpeedReadFrom, out maxSpeedStatLinkKey);
-            }
-
             var builder = new BlendTree2DBuilder
             {
                 BlendParameter = BlendParameter,
                 ReadKind = ReadKind,
                 ReadLinkKey = readLinkKey,
-                MaxSpeed = maxSpeed,
-                MaxSpeedStat = maxSpeedStat != null ? maxSpeedStat.Key : default,
-                MaxSpeedStatLinkKey = maxSpeedStatLinkKey,
+                CameraRelative = cameraRelative,
                 PositionOffset = positionOffset,
                 RotationOffset = Quaternion.Euler(eulerAnglesOffset),
                 RemoveStartOffset = removeStartOffset,

@@ -12,7 +12,7 @@ namespace BovineLabs.Timeline.Animation.Editor
         private SerializedProperty m_BlendParameter;
         private SerializedProperty m_ReadKind;
         private SerializedProperty m_ReadFrom;
-        private SerializedProperty m_MaxSpeed;
+        private SerializedProperty m_CameraRelative;
         private SerializedProperty m_PositionOffset;
         private SerializedProperty m_EulerAnglesOffset;
         private SerializedProperty m_RemoveStartOffset;
@@ -23,7 +23,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             m_BlendParameter = serializedObject.FindProperty("BlendParameter");
             m_ReadKind = serializedObject.FindProperty("ReadKind");
             m_ReadFrom = serializedObject.FindProperty("ReadFrom");
-            m_MaxSpeed = serializedObject.FindProperty("maxSpeed");
+            m_CameraRelative = serializedObject.FindProperty("cameraRelative");
             m_PositionOffset = serializedObject.FindProperty("positionOffset");
             m_EulerAnglesOffset = serializedObject.FindProperty("eulerAnglesOffset");
             m_RemoveStartOffset = serializedObject.FindProperty("removeStartOffset");
@@ -38,8 +38,6 @@ namespace BovineLabs.Timeline.Animation.Editor
 
             var readKind = (BlendDirectionReadKind)m_ReadKind.enumValueIndex;
             var fromClip = !m_ReadKind.hasMultipleDifferentValues && readKind == BlendDirectionReadKind.ClipValue;
-            var fromVelocity = !m_ReadKind.hasMultipleDifferentValues &&
-                               readKind == BlendDirectionReadKind.PhysicsLinearVelocityNormalized;
 
             if (fromClip)
                 EditorGUILayout.PropertyField(m_BlendParameter, new GUIContent("Blend Parameter"));
@@ -47,8 +45,9 @@ namespace BovineLabs.Timeline.Animation.Editor
             if (!fromClip)
                 EditorGUILayout.PropertyField(m_ReadFrom, new GUIContent("Read From"));
 
-            if (fromVelocity)
-                EditorGUILayout.PropertyField(m_MaxSpeed, new GUIContent("Max Speed"));
+            // Camera-relative has no meaning for a fixed ClipValue; only show it for the input/velocity kinds.
+            if (!fromClip)
+                EditorGUILayout.PropertyField(m_CameraRelative, new GUIContent("Camera Relative"));
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Clip Transform Offsets", EditorStyles.boldLabel);

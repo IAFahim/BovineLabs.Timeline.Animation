@@ -3,7 +3,6 @@ using BovineLabs.Core;
 using BovineLabs.Core.Collections;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
-using BovineLabs.Essence.Data;
 using BovineLabs.Timeline.Data;
 using BovineLabs.Timeline.EntityLinks;
 using BovineLabs.Timeline.EntityLinks.Data;
@@ -24,6 +23,7 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(TimelineAnimationUnificationSystem))]
+    [UpdateAfter(typeof(CameraGroundBasisSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationBlendTree2DTrackSystem : ISystem
@@ -49,6 +49,10 @@ namespace BovineLabs.Timeline.Animation
         private const float MinDuration = 0.001f;
 
         private const float DirectionEpsilon = 0.0001f;
+
+        // Below this planar speed (m^2/s^2, ~0.1 m/s) the body counts as stopped: the blend returns the r0 idle
+        // centre instead of normalising a near-zero velocity into a jittery direction. Tune per game feel.
+        private const float MoveDeadzoneSq = 0.01f;
 
         private UnsafeComponentLookup<BlendAnimationTree2DTrackData> _trackData;
         private UnsafeBufferLookup<BlendTree2DMotionData> _motionBuffer;
@@ -94,8 +98,7 @@ namespace BovineLabs.Timeline.Animation
                 PlayerMoveInputLookup = SystemAPI.GetComponentLookup<PlayerMoveInput>(true),
                 EntityLinkSourceLookup = state.GetUnsafeComponentLookup<EntityLinkSource>(true),
                 EntityLinkEntryLookup = state.GetUnsafeBufferLookup<EntityLinkEntry>(true),
-                TrackBindingLookup = SystemAPI.GetComponentLookup<TrackBinding>(true),
-                StatLookup = SystemAPI.GetBufferLookup<Stat>(true)
+                TrackBindingLookup = SystemAPI.GetComponentLookup<TrackBinding>(true)
             }.ScheduleParallel(state.Dependency);
 
             var clipCount = SystemAPI.QueryBuilder()
@@ -149,7 +152,6 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public UnsafeComponentLookup<EntityLinkSource> EntityLinkSourceLookup;
             [ReadOnly] public UnsafeBufferLookup<EntityLinkEntry> EntityLinkEntryLookup;
             [ReadOnly] public ComponentLookup<TrackBinding> TrackBindingLookup;
-            [ReadOnly] public BufferLookup<Stat> StatLookup;
 
             private void Execute(Entity clipEntity, ref BlendTree2DDirectionClipData clipData)
             {
@@ -170,42 +172,33 @@ namespace BovineLabs.Timeline.Animation
                     return;
                 }
 
+                // Camera basis is published once per frame by CameraGroundBasisSystem; every camera-relative clip on
+                // every character reads this one shared value. Gated on Valid so a missing camera falls back cleanly.
+                var basis = CameraGroundBasis.Data;
+                var cameraRelative = clipData.CameraRelative && basis.Valid;
+
                 if (clipData.ReadKind == BlendDirectionReadKind.PhysicsLinearVelocityNormalized)
                 {
                     if (PhysicsVelocityLookup.TryGetComponent(resolvedEntity, out var pv))
                     {
                         var worldVelocity = new float3(pv.Linear.x, 0f, pv.Linear.z);
-                        var facing = LocalToWorldLookup.TryGetComponent(resolvedEntity, out var ltw)
-                            ? quaternion.LookRotationSafe(new float3(ltw.Forward.x, 0f, ltw.Forward.z), math.up())
-                            : quaternion.identity;
+
+                        // Camera-relative: measure velocity in the camera's ground frame (screen-relative locomotion).
+                        // Otherwise measure it in the character's own facing (the default, body-relative locomotion).
+                        var facing = cameraRelative
+                            ? quaternion.LookRotationSafe(basis.Forward, math.up())
+                            : LocalToWorldLookup.TryGetComponent(resolvedEntity, out var ltw)
+                                ? quaternion.LookRotationSafe(new float3(ltw.Forward.x, 0f, ltw.Forward.z), math.up())
+                                : quaternion.identity;
                         var localVelocity = math.rotate(math.inverse(facing), worldVelocity);
 
-                        // Optional stat scale: maxSpeed *= MovementSpeed stat (resolved via link from the binding,
-                        // like the velocity ReadFrom). Keeps the blend normalization tracking the real top speed.
-                        var maxSpeed = clipData.MaxSpeed;
-                        if (clipData.MaxSpeedStat.Value != 0)
-                        {
-                            var statEntity = Entity.Null;
-                            if (clipData.MaxSpeedStatLinkKey == 0)
-                            {
-                                statEntity = binding.Value;
-                            }
-                            else if (!EntityLinkResolver.TryResolve(binding.Value, clipData.MaxSpeedStatLinkKey,
-                                         EntityLinkSourceLookup, EntityLinkEntryLookup, out statEntity))
-                            {
-                                statEntity = Entity.Null;
-                            }
-
-                            if (statEntity != Entity.Null && StatLookup.TryGetBuffer(statEntity, out var stats))
-                            {
-                                maxSpeed *= stats.AsMap().GetValueFloat(clipData.MaxSpeedStat, 1f);
-                            }
-                        }
-
-                        var speedFraction = new float2(localVelocity.x, localVelocity.z) /
-                                            math.max(DirectionEpsilon, maxSpeed);
-                        var radius = math.length(speedFraction);
-                        clipData.Value = radius > 1f ? speedFraction / radius : speedFraction;
+                        // Direction only, scale-free: any movement above the deadzone snaps to the outer ring (full
+                        // directional motion); at/near rest the value is the r0 centre (idle). No maxSpeed reference,
+                        // so unbounded roguelike speed stats never saturate or shift a half-blend band - moving is
+                        // always "1" in the facing direction, stopped is "0". Holding the last direction is avoided:
+                        // zero selects the idle centre motion directly.
+                        var dir = new float2(localVelocity.x, localVelocity.z);
+                        clipData.Value = math.lengthsq(dir) > MoveDeadzoneSq ? math.normalize(dir) : float2.zero;
                     }
                     else
                     {
@@ -217,6 +210,20 @@ namespace BovineLabs.Timeline.Animation
                     if (PlayerMoveInputLookup.TryGetComponent(resolvedEntity, out var moveInput))
                     {
                         var vel2D = moveInput.Value;
+
+                        if (cameraRelative)
+                        {
+                            // Lift the camera-relative stick into a world ground direction, then express it in the
+                            // character's facing so the correct directional anim plays while the body is steered
+                            // camera-relative. No camera facing -> identity (raw stick), matching the non-camera path.
+                            var world = (basis.Right * vel2D.x) + (basis.Forward * vel2D.y);
+                            var facing = LocalToWorldLookup.TryGetComponent(resolvedEntity, out var ltw)
+                                ? quaternion.LookRotationSafe(new float3(ltw.Forward.x, 0f, ltw.Forward.z), math.up())
+                                : quaternion.identity;
+                            var local = math.rotate(math.inverse(facing), world);
+                            vel2D = new float2(local.x, local.z);
+                        }
+
                         var lengthSq = math.lengthsq(vel2D);
                         clipData.Value = lengthSq > 1f
                             ? vel2D / math.sqrt(lengthSq)

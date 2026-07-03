@@ -20,13 +20,11 @@ namespace BovineLabs.Timeline.Animation
         public ushort ReadLinkKey;
         [CreateProperty] public float2 Value { get; set; }
 
-        public float MaxSpeed;
-
-        // Optional: multiply MaxSpeed by this stat's value (resolved via link from the track binding, exactly like
-        // ReadKind's velocity ReadFrom). Lets a MovementSpeed stat drive the blend normalization so it tracks the
-        // real, stat-scaled top speed instead of a hardcoded constant. Stat.Value == 0 means "no stat, use MaxSpeed".
-        public BovineLabs.Essence.Data.StatKey MaxSpeedStat;
-        public ushort MaxSpeedStatLinkKey;
+        // Interpret the blend direction relative to the main camera's ground projection (see CameraGroundBasis),
+        // like AxisTransform's CameraRelative flag. PlayerMoveInput: the stick is lifted through the camera basis
+        // into world then expressed in the character's facing. Velocity: the blend is expressed in the camera frame
+        // instead of the character facing. No effect on ClipValue, or when there is no main camera.
+        public bool CameraRelative;
 
         public float3 PositionOffset;
         public quaternion RotationOffset;
