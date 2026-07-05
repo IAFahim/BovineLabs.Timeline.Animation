@@ -4,6 +4,8 @@
     "references": [
         "BovineLabs.Core",
         "BovineLabs.Core.Authoring",
+        "BovineLabs.Core.Extensions",
+        "BovineLabs.Core.Extensions.Authoring",
         "BovineLabs.Reaction.Authoring",
         "BovineLabs.Reaction.Data",
         "BovineLabs.Timeline.Authoring",
@@ -17,6 +19,7 @@
         "BovineLabs.Timeline.Physics.Authoring",
         "Rukhanka.Runtime",
         "Rukhanka.Hybrid",
+        "Rukhanka.Toolbox",
         "Unity.Burst",
         "Unity.Collections",
         "Unity.Entities",

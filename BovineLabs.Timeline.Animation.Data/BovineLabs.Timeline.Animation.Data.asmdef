@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "BovineLabs.Core",
+        "BovineLabs.Core.Extensions",
         "BovineLabs.Timeline",
         "BovineLabs.Timeline.Data",
         "BovineLabs.Timeline.EntityLinks.Data",
