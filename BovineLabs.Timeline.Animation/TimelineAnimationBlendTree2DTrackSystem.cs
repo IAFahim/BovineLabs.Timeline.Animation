@@ -23,7 +23,6 @@ namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
     [UpdateBefore(typeof(TimelineAnimationUnificationSystem))]
-    [UpdateAfter(typeof(CameraGroundBasisSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationBlendTree2DTrackSystem : ISystem

@@ -16,7 +16,6 @@ using Unity.Transforms;
 namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateBefore(typeof(AnimationProcessSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct CharacterLookAtTrackSystem : ISystem

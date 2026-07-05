@@ -9,7 +9,6 @@ using Hash128 = Unity.Entities.Hash128;
 namespace BovineLabs.Timeline.Animation
 {
     [UpdateInGroup(typeof(TimelineComponentAnimationGroup))]
-    [UpdateBefore(typeof(AnimationProcessSystem))]
     [WorldSystemFilter(WorldSystemFilterFlags.LocalSimulation | WorldSystemFilterFlags.ClientSimulation |
                        WorldSystemFilterFlags.ServerSimulation)]
     public partial struct TimelineAnimationUnificationSystem : ISystem
