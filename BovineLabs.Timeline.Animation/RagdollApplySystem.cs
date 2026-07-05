@@ -30,6 +30,8 @@ namespace BovineLabs.Timeline.Animation
         private ComponentLookup<ActiveRagdoll> _activeRagdoll;
         private ComponentLookup<LocalToWorld> _localToWorld;
         private ComponentLookup<OverrideTransformIKComponent> _overrideIK;
+        private ComponentLookup<RagdollBody> _bodies;
+        private ComponentLookup<Disabled> _disabled;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -37,7 +39,11 @@ namespace BovineLabs.Timeline.Animation
             _activeRagdoll = state.GetComponentLookup<ActiveRagdoll>(true);
             _localToWorld = state.GetComponentLookup<LocalToWorld>(true);
             _overrideIK = state.GetComponentLookup<OverrideTransformIKComponent>();
-            state.RequireForUpdate<RagdollBody>();
+            _bodies = state.GetComponentLookup<RagdollBody>(true);
+            _disabled = state.GetComponentLookup<Disabled>(true);
+            // No RequireForUpdate: ragdoll bodies start structurally Disabled, and a RequireForUpdate<RagdollBody>
+            // query excludes disabled entities — so it would never fire while OFF and the bodies could never be
+            // un-disabled (self-deadlock). The job is a cheap no-op when nothing is ragdolling.
         }
 
         [BurstCompile]
@@ -46,6 +52,8 @@ namespace BovineLabs.Timeline.Animation
             _activeRagdoll.Update(ref state);
             _localToWorld.Update(ref state);
             _overrideIK.Update(ref state);
+            _bodies.Update(ref state);
+            _disabled.Update(ref state);
 
             var ecb = SystemAPI.GetSingleton<EndFixedStepSimulationEntityCommandBufferSystem.Singleton>()
                 .CreateCommandBuffer(state.WorldUnmanaged)
@@ -56,6 +64,17 @@ namespace BovineLabs.Timeline.Animation
                 ActiveRagdoll = _activeRagdoll,
                 LocalToWorld = _localToWorld,
                 OverrideIK = _overrideIK,
+                Ecb = ecb,
+            }.ScheduleParallel(state.Dependency);
+
+            // The joint entities are baked Disabled alongside the bodies (the corpse's constraints must be out of
+            // the world while OFF). Un-disable them together with their rig's bodies — without this the bodies join
+            // the world UNCONSTRAINED and scatter. Rig is resolved from either paired body (both share a rig).
+            state.Dependency = new JointJob
+            {
+                ActiveRagdoll = _activeRagdoll,
+                Bodies = _bodies,
+                Disabled = _disabled,
                 Ecb = ecb,
             }.ScheduleParallel(state.Dependency);
         }
@@ -83,11 +102,15 @@ namespace BovineLabs.Timeline.Animation
 
                 if (isActive && !bodyState.Fired)
                 {
-                    // ENTER — snap onto the bone's current animated world pose, then hand it to physics.
-                    if (LocalToWorld.TryGetComponent(body.Bone, out var boneLtw))
+                    // ENTER — snap onto the bone's current animated pose, applying the authored bone-local offset
+                    // so the capsule keeps the orientation its joint pivots were baked in (else the solver explodes).
+                    // ponytail: snap DISABLED for a diagnostic — leave bodies at their baked (bind) pose to test
+                    // whether snapping to the animated pose is what violates the joints and rockets the ragdoll.
+                    if (false && LocalToWorld.TryGetComponent(body.Bone, out var boneLtw))
                     {
-                        transform.Position = boneLtw.Position;
-                        transform.Rotation = boneLtw.Rotation;
+                        var boneRot = boneLtw.Rotation;
+                        transform.Position = boneLtw.Position + math.mul(boneRot, body.BoneLocalPos);
+                        transform.Rotation = math.mul(boneRot, body.BoneLocalRot);
                         transform.Scale = 1f;
                     }
 
@@ -116,6 +139,40 @@ namespace BovineLabs.Timeline.Animation
                 if (bone != Entity.Null && OverrideIK.HasComponent(bone))
                 {
                     OverrideIK.SetComponentEnabled(bone, value);
+                }
+            }
+        }
+
+        // Syncs each ragdoll joint entity's Disabled (in/out of the physics world) to its rig's ActiveRagdoll,
+        // so constraints activate together with their bodies. Edge is read off the joint's own Disabled state,
+        // so no per-joint bookkeeping component is needed.
+        [BurstCompile]
+        [WithOptions(EntityQueryOptions.IncludeDisabledEntities)]
+        private partial struct JointJob : IJobEntity
+        {
+            [ReadOnly] public ComponentLookup<ActiveRagdoll> ActiveRagdoll;
+            [ReadOnly] public ComponentLookup<RagdollBody> Bodies;
+            [ReadOnly] public ComponentLookup<Disabled> Disabled;
+            public EntityCommandBuffer.ParallelWriter Ecb;
+
+            private void Execute([ChunkIndexInQuery] int sortKey, Entity entity, in PhysicsConstrainedBodyPair pair)
+            {
+                if (!Bodies.TryGetComponent(pair.EntityA, out var body))
+                {
+                    return;
+                }
+
+                var isActive = ActiveRagdoll.HasComponent(body.RigRoot) &&
+                               ActiveRagdoll.IsComponentEnabled(body.RigRoot);
+                var isDisabled = Disabled.HasComponent(entity);
+
+                if (isActive && isDisabled)
+                {
+                    Ecb.RemoveComponent<Disabled>(sortKey, entity);
+                }
+                else if (!isActive && !isDisabled)
+                {
+                    Ecb.AddComponent<Disabled>(sortKey, entity);
                 }
             }
         }

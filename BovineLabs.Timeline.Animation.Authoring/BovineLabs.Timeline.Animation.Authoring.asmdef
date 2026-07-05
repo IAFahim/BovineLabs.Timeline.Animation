@@ -14,6 +14,7 @@
         "BovineLabs.Timeline.Animation.Data",
         "BovineLabs.Timeline.Data",
         "BovineLabs.Timeline.PlayerInputs.Authoring",
+        "BovineLabs.Timeline.Physics.Authoring",
         "Rukhanka.Runtime",
         "Rukhanka.Hybrid",
         "Unity.Burst",

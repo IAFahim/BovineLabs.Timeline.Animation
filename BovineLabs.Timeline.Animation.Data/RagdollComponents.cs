@@ -1,4 +1,5 @@
 using Unity.Entities;
+using Unity.Mathematics;
 
 namespace BovineLabs.Timeline.Animation
 {
@@ -20,6 +21,13 @@ namespace BovineLabs.Timeline.Animation
     {
         public Entity RigRoot;
         public Entity Bone;
+
+        // The body's authored pose expressed in the BONE's local frame (captured at bake). On the ragdoll enter
+        // edge the body is snapped to bone.LocalToWorld * this offset — NOT the raw bone pose — so the capsule
+        // keeps the exact orientation its joint pivots were baked in. Snapping to the raw bone rotation instead
+        // displaces every joint pivot and the solver explodes the ragdoll.
+        public float3 BoneLocalPos;
+        public quaternion BoneLocalRot;
     }
 
     /// <summary>

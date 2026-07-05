@@ -148,11 +148,12 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     Radius = radius,
                 });
 
-                // No self-collision: ragdoll capsules overlap at joints. Dedicated category, excluded from itself.
+                // No self-collision: ragdoll capsules overlap at joints. Dedicated category (31 = Debug/Test),
+                // excluded from itself. Collide ONLY with the solid world — Ground(0), Barrier(2), Prop(8) — NOT
+                // the character's own gameplay volumes (Character/Hitbox/Hurtbox/Trigger/CameraBlocker), which the
+                // corpse sits inside and would be violently ejected from. This is the fix for the ragdoll "explosion".
                 shape.BelongsTo = new PhysicsCategoryTags { Category31 = true };
-                var collides = PhysicsCategoryTags.Everything;
-                collides.Category31 = false;
-                shape.CollidesWith = collides;
+                shape.CollidesWith = new PhysicsCategoryTags { Category00 = true, Category02 = true, Category08 = true };
 
                 // Runtime wiring: link this body to its rig + bone, and make the bone follow this body when ragdolling.
                 var bodyAuth = bodyGO.AddComponent<RagdollBodyAuthoring>();

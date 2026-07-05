@@ -23,7 +23,10 @@ namespace BovineLabs.Timeline.Animation
         public void OnCreate(ref SystemState state)
         {
             _activeRagdoll = state.GetComponentLookup<ActiveRagdoll>();
-            state.RequireForUpdate<ActiveRagdoll>();
+            // Gate on ragdoll clips existing — NOT on ActiveRagdoll, which starts disabled (enableable): a
+            // RequireForUpdate<ActiveRagdoll> query excludes disabled-enableable entities, so this system could
+            // never run to enable it in the first place.
+            state.RequireForUpdate<RagdollClipTag>();
         }
 
         [BurstCompile]
