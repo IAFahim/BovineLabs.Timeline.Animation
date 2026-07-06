@@ -15,7 +15,7 @@ math reuses the existing, correct `WeaponAnchorBlendSystem` pipeline unchanged.
 | Weighted quaternion blend + relax-to-rest math — REUSE | `BovineLabs.Timeline.Animation/AnchorMath.cs` |
 | Same-frame bone pose via manual parent walk — REUSE | `BovineLabs.Timeline.Animation/BoneWorld.cs` |
 | Sample/rest components | `BovineLabs.Timeline.Animation.Data/WeaponAnchorData.cs` |
-| Known bug A4: weapon-parent L2W one frame stale in ResolveJob — FIX in Phase 2 | `REVIEW_NOTES.md` |
+| ~~Known bug A4: weapon-parent L2W one frame stale in ResolveJob~~ — FIXED in Phase 2 (`BoneWorld` parent walk in ResolveJob + `FollowPositionOnlySystem`) | `REVIEW_NOTES.md` |
 | Past attempt to learn from (hard snap, stale bones, velocity freeze hack) — do NOT copy | `com.bovinelabs.timeline.physics` → `Sockets/WeaponSocket*.cs`, `SocketReturn*.cs` |
 | Stable object id → prefab registry (the blob key) | `com.bovinelabs.core` → `ObjectManagement/ObjectDefinition.cs` |
 | ObjectDefinition picker drawer precedent | `com.bovinelabs.timeline.core` → `Editor/ObjectDefinitionFieldDrawer.cs` |

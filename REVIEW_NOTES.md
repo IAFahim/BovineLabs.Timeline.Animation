@@ -151,9 +151,12 @@ state to diverge), not an edge case.
 
 ### Authoring & robustness
 
-- **A4 [L] — `WeaponAnchorBlendSystem` / `FollowPositionOnlySystem` read bone `LocalToWorld`
-  one frame stale** (run in `TransformSystemGroup` before `LocalToWorldSystem`). Visible on fast
-  swings / hard cuts. Document, or recompute the bone world matrix from fresh `LocalTransform`.
+- ~~**A4 [L] — `WeaponAnchorBlendSystem` / `FollowPositionOnlySystem` read bone `LocalToWorld`
+  one frame stale**~~ (run in `TransformSystemGroup` before `LocalToWorldSystem`). Visible on fast
+  swings / hard cuts. **RESOLVED:** both systems now recompute the world matrix from fresh
+  `LocalTransform` via `BoneWorld.TryComputeWorldMatrix` (walking `Parent` +
+  `PostTransformMatrix`), falling back to the cached `LocalToWorld` only for entities outside
+  the `LocalTransform` hierarchy.
 - **A5 [L] — no additive blend-mode authoring** (all paths hardcode `Override`). Ties to
   `MISSING_FEATURES.md` M2.
 - **A6 [nit] — `AfterImageClip.duration => 20`** default (20s ghost) is an odd default.
@@ -175,7 +178,7 @@ state to diverge), not an edge case.
 2. ~~A1 (after-image sync / structural churn)~~ — RESOLVED
 3. ~~Netcode question (if predicted) → then ghost or recompute the smoothing state~~ — RESOLVED: local-only, dropped
 4. T1 (full-World behavior test) — PARTLY RESOLVED: static-helper math/sentinel/scrub tests added; end-to-end system test still open
-5. ~~C2–C4~~ RESOLVED; remaining polish = A2–A6 (allocation consistency, O(n²), stale L2W, additive authoring, AfterImage default).
+5. ~~C2–C4~~ RESOLVED; ~~A4 (stale L2W)~~ RESOLVED; remaining polish = A2, A3, A5, A6 (allocation consistency, O(n²), additive authoring, AfterImage default).
 
 ## Resolved (was: open / not yet examined deeply)
 

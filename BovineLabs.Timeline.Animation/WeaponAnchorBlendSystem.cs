@@ -74,7 +74,13 @@ namespace BovineLabs.Timeline.Animation
             {
                 DeltaTime = SystemAPI.Time.DeltaTime,
                 LocalToWorldLookup = state.GetComponentLookup<LocalToWorld>(true),
-                ParentLookup = state.GetComponentLookup<Parent>(true)
+                LocalTransformLookup = state.GetComponentLookup<LocalTransform>(true),
+                PostTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true),
+                ParentLookup = state.GetComponentLookup<Parent>(true),
+                AttachmentLookup = state.GetComponentLookup<WeaponAttachment>(true),
+                AttachmentAnchorLookup = state.GetComponentLookup<WeaponAttachmentAnchor>(true),
+                EaseLookup = state.GetComponentLookup<WeaponAttachEase>(),
+                PoseVelocityLookup = state.GetComponentLookup<WeaponPoseVelocity>()
             }.ScheduleParallel(state.Dependency);
         }
 
@@ -150,12 +156,40 @@ namespace BovineLabs.Timeline.Animation
             public float DeltaTime;
 
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
+            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
+            [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
+            [ReadOnly] public ComponentLookup<WeaponAttachment> AttachmentLookup;
+            [ReadOnly] public ComponentLookup<WeaponAttachmentAnchor> AttachmentAnchorLookup;
+
+            // Both written only through the executing entity itself; never another chunk's.
+            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponAttachEase> EaseLookup;
+            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponPoseVelocity> PoseVelocityLookup;
 
             private void Execute(Entity entity, ref DynamicBuffer<WeaponAnchorSample> samples,
                 ref LocalTransform transform, ref WeaponAnchorRest rest)
             {
-                if (AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation))
+                var anchored = AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation);
+                samples.Clear();
+
+                // Persistent attachment: no grip clip covers the weapon this frame but it is still held —
+                // one full-weight sample at the attachment grip so the equip pose survives the clip window.
+                if (!anchored &&
+                    AttachmentLookup.HasComponent(entity) &&
+                    AttachmentLookup.IsComponentEnabled(entity) &&
+                    AttachmentAnchorLookup.TryGetComponent(entity, out var attachmentAnchor) &&
+                    attachmentAnchor.Bone != Entity.Null &&
+                    BoneWorld.TryComputeWorldMatrix(attachmentAnchor.Bone, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out var boneWorld))
+                {
+                    var bonePosition = boneWorld.c3.xyz;
+                    var boneRotation = new quaternion(math.orthonormalize(new float3x3(boneWorld)));
+                    worldPosition = bonePosition + math.mul(boneRotation, attachmentAnchor.LocalPosition);
+                    worldRotation = math.mul(boneRotation, attachmentAnchor.LocalRotation);
+                    anchored = true;
+                }
+
+                if (anchored)
                 {
                     // Anchored this frame: snapshot the pre-attach pose on the activation edge, then drive the bone pose.
                     if (!rest.Captured)
@@ -165,9 +199,66 @@ namespace BovineLabs.Timeline.Animation
                         rest.Captured = true;
                     }
 
-                    if (ParentLookup.TryGetComponent(entity, out var parent) &&
-                        LocalToWorldLookup.TryGetComponent(parent.Value, out var parentL2W) &&
-                        TransformConversion.WorldToParentLocal(parentL2W.Value, worldPosition, worldRotation,
+                    // A4: this runs before LocalToWorldSystem, so LocalToWorld is one frame stale.
+                    // Recompute the parent world matrix from fresh LocalTransform; fall back to the
+                    // cached LocalToWorld only for parents outside the LocalTransform hierarchy.
+                    var parentWorld = float4x4.identity;
+                    var hasParentWorld = ParentLookup.TryGetComponent(entity, out var parent) &&
+                                         TryGetFreshWorld(parent.Value, out parentWorld);
+
+                    // Pickup ease: relax from the current (ground) pose toward the anchor target instead of
+                    // snapping — the detach relax math run in the attach direction.
+                    if (EaseLookup.TryGetComponent(entity, out var ease) && ease.Active != 0)
+                    {
+                        var currentPosition = transform.Position;
+                        var currentRotation = transform.Rotation;
+                        if (hasParentWorld)
+                        {
+                            currentPosition = math.transform(parentWorld, currentPosition);
+                            currentRotation = math.mul(new quaternion(math.orthonormalize(new float3x3(parentWorld))), currentRotation);
+                        }
+
+                        var ct = 1f - math.exp(-RelaxRate * DeltaTime);
+                        var easedPosition = math.lerp(currentPosition, worldPosition, ct);
+                        var easedRotation = math.slerp(currentRotation, worldRotation, ct);
+
+                        if (math.distancesq(easedPosition, worldPosition) <= RestPositionEpsilonSq &&
+                            math.abs(math.dot(easedRotation, worldRotation)) >= RestRotationDot)
+                        {
+                            ease.Active = 0;
+                            EaseLookup[entity] = ease;
+                        }
+                        else
+                        {
+                            worldPosition = easedPosition;
+                            worldRotation = easedRotation;
+                        }
+                    }
+
+                    // Track the blended pose's world velocity so Drop can hand a believable throw to physics.
+                    if (PoseVelocityLookup.TryGetComponent(entity, out var velocity))
+                    {
+                        if (velocity.HasPrev != 0 && DeltaTime > 0f)
+                        {
+                            velocity.Linear = (worldPosition - velocity.PrevPosition) / DeltaTime;
+
+                            var dq = math.mul(worldRotation, math.inverse(velocity.PrevRotation));
+                            dq.value = math.select(dq.value, -dq.value, dq.value.w < 0f);
+                            var axisLengthSq = math.lengthsq(dq.value.xyz);
+                            velocity.Angular = axisLengthSq > 1e-12f
+                                ? dq.value.xyz * math.rsqrt(axisLengthSq) *
+                                  (2f * math.acos(math.clamp(dq.value.w, -1f, 1f)) / DeltaTime)
+                                : float3.zero;
+                        }
+
+                        velocity.PrevPosition = worldPosition;
+                        velocity.PrevRotation = worldRotation;
+                        velocity.HasPrev = 1;
+                        PoseVelocityLookup[entity] = velocity;
+                    }
+
+                    if (hasParentWorld &&
+                        TransformConversion.WorldToParentLocal(parentWorld, worldPosition, worldRotation,
                             out var localPosition, out var localRotation))
                     {
                         transform.Position = localPosition;
@@ -179,7 +270,6 @@ namespace BovineLabs.Timeline.Animation
                         transform.Rotation = worldRotation;
                     }
 
-                    samples.Clear();
                     return;
                 }
 
@@ -198,6 +288,21 @@ namespace BovineLabs.Timeline.Animation
                     transform.Rotation = rest.Rotation;
                     rest.Captured = false;
                 }
+            }
+
+            private bool TryGetFreshWorld(Entity entity, out float4x4 world)
+            {
+                if (BoneWorld.TryComputeWorldMatrix(entity, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out world))
+                    return true;
+
+                if (LocalToWorldLookup.TryGetComponent(entity, out var l2w))
+                {
+                    world = l2w.Value;
+                    return true;
+                }
+
+                return false;
             }
         }
     }

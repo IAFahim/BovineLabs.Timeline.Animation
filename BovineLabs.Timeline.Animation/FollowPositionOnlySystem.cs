@@ -67,9 +67,16 @@ namespace BovineLabs.Timeline.Animation
                 else
                     return;
 
-                if (ParentLookup.TryGetComponent(entity, out var selfParent) &&
-                    LocalToWorldLookup.TryGetComponent(selfParent.Value, out var parentL2W) &&
-                    TransformConversion.WorldPositionToParentLocal(parentL2W.Value, targetPos, math.EPSILON,
+                // A4: runs before LocalToWorldSystem — prefer a parent world matrix recomputed from
+                // fresh LocalTransform over the one-frame-stale LocalToWorld cache.
+                float4x4 parentWorld = default;
+                var hasParentWorld = ParentLookup.TryGetComponent(entity, out var selfParent) &&
+                                     (BoneWorld.TryComputeWorldMatrix(selfParent.Value, LocalTransformLookup,
+                                          ParentLookup, PostTransformMatrixLookup, out parentWorld) ||
+                                      TryGetL2W(selfParent.Value, out parentWorld));
+
+                if (hasParentWorld &&
+                    TransformConversion.WorldPositionToParentLocal(parentWorld, targetPos, math.EPSILON,
                         out var localPos))
                 {
                     lt.Position = math.all(math.isfinite(localPos)) ? localPos : targetPos;
@@ -78,6 +85,18 @@ namespace BovineLabs.Timeline.Animation
                 {
                     lt.Position = targetPos;
                 }
+            }
+
+            private bool TryGetL2W(Entity entity, out float4x4 world)
+            {
+                if (LocalToWorldLookup.TryGetComponent(entity, out var l2w))
+                {
+                    world = l2w.Value;
+                    return true;
+                }
+
+                world = default;
+                return false;
             }
         }
     }

@@ -70,6 +70,33 @@ Still worth knowing:
 - **WeaponAnchor / LookAt need a re-bake.** They depend on extra baked components, so previously-imported SubScenes must re-bake (happens automatically on scene load) before anchoring/look-at resume.
 - **AfterImageClip has no custom inspector** (it has no tunable fields, by design).
 
+## 10. Weapons — grip presets + equip/drop/pickup (NEW)
+
+The old **WeaponAnchorClip** (hand-typed offset + an ExposedReference to a bone per clip) is replaced by **data-driven grips**. You author a weapon's hold-poses once, then reference them by name from any timeline — no per-clip bone wiring, and the same asset works on every character rig.
+
+### Author a weapon's grips (once per weapon)
+1. Create a **Weapon Grip Preset** asset (`Create ▸ BovineLabs ▸ Timeline ▸ Weapon Grip Preset`) next to the weapon's **ObjectDefinition**.
+2. Assign that **ObjectDefinition** — this is the blob key; the grip lookup is by weapon object id, so it resolves for any spawned instance of that weapon.
+3. Add a **Grip** row per hold-style: give it a **name** (e.g. `OneHand`, `TwoHand`, `Sheath`), pick the **bone** it attaches to, and set **local position/rotation**. Drag the **Scene-view handles** on a previewed character to place it by eye instead of typing numbers.
+4. Set **Default Grip** — the fallback used when a clip names a grip this weapon doesn't have.
+
+All presets bake into one **WeaponGripSettings** registry blob (a `SettingsBase`); nothing else to wire.
+
+### Use grips on a timeline
+- **WeaponGripClip** (on a **WeaponGripTrack** bound to the weapon): pick a grip from the **dropdown** (populated from every preset). While the clip is active the weapon rides that bone via the same weighted blend pipeline as WeaponAnchor — **overlap two grip clips to crossfade** from one hold to another (one-hand → two-hand) with no snap.
+
+### Lifecycle — WeaponStateClip (equip / re-attach / drop / pickup)
+One **edge clip** (fires once when it goes active; length is irrelevant) with a **Mode**:
+- **Equip** — spawns the weapon from its **ObjectDefinition** already in-hand at the chosen grip (appears at the designed pose, never an incidental one). Physics simulation is disabled while held.
+- **ReAttach** — retargets an already-held weapon to a different grip; the pose change rides the crossfade.
+- **Drop** — releases the weapon to physics, handing it the **blended pose's real velocity** so a throw/drop flies believably. No velocity fakery.
+- **Pickup** — attaches a world weapon and **eases** it into the grip from wherever it lay ("stylish pickup"), instead of snapping.
+
+⚠️ Notes:
+- The weapon needs the anchor-pipeline runtime components; Equip/ReAttach/Pickup add them automatically when missing.
+- Grip **names are hashed** (Rukhanka name hash) — a typo silently falls back to the Default Grip (a `BL_DEBUG` warning fires). Keep grip names consistent across a weapon's presets.
+- Re-bake the SubScene after editing preset poses, same as any baked data.
+
 ## 9. Validate before a milestone
 Menu **BovineLabs ▸ Animation ▸ Validate Timelines** opens a window that scans every timeline (in loaded scenes and in the project) plus your `TimelineAnimationStateAuthoring` rigs, and lists authoring foot-guns — each with a **Ping** button and, where a safe automatic fix exists, a **one-click Fix**:
 - **Loop-snap risk** — a looping clip whose duration isn't a whole number of cycles will snap at the seam. *Primary fix:* **Enable Continuous Loop** (seam-proof at any duration; requires a re-bake). *Alternative:* snap the clip duration to a whole number of cycles. (BlendTree2D clips have no Continuous Loop, so only the snap fix is offered.)
