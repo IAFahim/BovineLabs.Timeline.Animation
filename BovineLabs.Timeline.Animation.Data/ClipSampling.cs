@@ -5,6 +5,9 @@ namespace BovineLabs.Timeline.Animation
 {
     internal static class ClipSampling
     {
+        // #35: intentionally NOT a drop-in for Rukhanka's NormalizeAnimationTime. This drives the timeline clip's
+        // extrapolation modes (PingPong / Loop / clamped-Saturate) and omits Rukhanka's per-clip cycle offset. Do not
+        // "unify" the two — they answer different questions (timeline extrapolation vs animation-clip cycle phase).
         internal static float NormalizedClipTime(float timeSeconds, float duration,
             TimelineClip.ClipExtrapolation extrapolation, bool looped)
         {

@@ -25,6 +25,10 @@ namespace BovineLabs.Timeline.Animation
             _localToWorldLookup = state.GetComponentLookup<LocalToWorld>(true);
             _parentLookup = state.GetComponentLookup<Parent>(true);
             _postTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true);
+
+            // A24: pure per-frame follow with no persistent state to reconcile on removal (dropping the component just
+            // stops the follow) => safe to skip entirely when no FollowPositionOnly exists.
+            state.RequireForUpdate<FollowPositionOnly>();
         }
 
         [BurstCompile]
@@ -76,8 +80,7 @@ namespace BovineLabs.Timeline.Animation
                                       TryGetL2W(selfParent.Value, out parentWorld));
 
                 if (hasParentWorld &&
-                    TransformConversion.WorldPositionToParentLocal(parentWorld, targetPos, math.EPSILON,
-                        out var localPos))
+                    TransformConversion.WorldPositionToParentLocal(parentWorld, targetPos, out var localPos))
                 {
                     lt.Position = math.all(math.isfinite(localPos)) ? localPos : targetPos;
                 }

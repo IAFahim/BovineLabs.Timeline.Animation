@@ -18,45 +18,6 @@ namespace BovineLabs.Timeline.Animation.Authoring
     /// </summary>
     public static class RagdollGenerator
     {
-        private enum JointKind
-        {
-            None,
-            Ball,
-            Hinge,
-        }
-
-        private struct BoneSpec
-        {
-            public HumanBodyBones Bone;
-            public HumanBodyBones[] DirChildren; // first existing bone gives capsule direction + length
-            public HumanBodyBones Parent;        // parent ragdoll bone; (HumanBodyBones)(-1) = root, no joint
-            public JointKind Joint;
-            public float RadiusScale;            // radius = boneLen * scale, clamped
-            public float Mass;
-            public float ConeAngle;              // ball: cone + perpendicular half-angle (deg)
-            public float TwistRange;             // ball: +/- twist (deg)
-            public float HingeMin, HingeMax;     // hinge: angle limits (deg)
-        }
-
-        private const HumanBodyBones Root = (HumanBodyBones)(-1);
-
-        private static readonly BoneSpec[] Specs =
-        {
-            new() { Bone = HumanBodyBones.Hips, DirChildren = new[] { HumanBodyBones.Spine, HumanBodyBones.Chest }, Parent = Root, Joint = JointKind.None, RadiusScale = 0.6f, Mass = 8f },
-            new() { Bone = HumanBodyBones.Spine, DirChildren = new[] { HumanBodyBones.Chest, HumanBodyBones.UpperChest, HumanBodyBones.Neck, HumanBodyBones.Head }, Parent = HumanBodyBones.Hips, Joint = JointKind.Ball, RadiusScale = 0.5f, Mass = 10f, ConeAngle = 25f, TwistRange = 15f },
-            new() { Bone = HumanBodyBones.Head, DirChildren = null, Parent = HumanBodyBones.Spine, Joint = JointKind.Ball, RadiusScale = 0.5f, Mass = 5f, ConeAngle = 25f, TwistRange = 25f },
-
-            new() { Bone = HumanBodyBones.LeftUpperArm, DirChildren = new[] { HumanBodyBones.LeftLowerArm }, Parent = HumanBodyBones.Spine, Joint = JointKind.Ball, RadiusScale = 0.28f, Mass = 2.5f, ConeAngle = 60f, TwistRange = 45f },
-            new() { Bone = HumanBodyBones.LeftLowerArm, DirChildren = new[] { HumanBodyBones.LeftHand }, Parent = HumanBodyBones.LeftUpperArm, Joint = JointKind.Hinge, RadiusScale = 0.25f, Mass = 1.5f, HingeMin = 0f, HingeMax = 150f },
-            new() { Bone = HumanBodyBones.RightUpperArm, DirChildren = new[] { HumanBodyBones.RightLowerArm }, Parent = HumanBodyBones.Spine, Joint = JointKind.Ball, RadiusScale = 0.28f, Mass = 2.5f, ConeAngle = 60f, TwistRange = 45f },
-            new() { Bone = HumanBodyBones.RightLowerArm, DirChildren = new[] { HumanBodyBones.RightHand }, Parent = HumanBodyBones.RightUpperArm, Joint = JointKind.Hinge, RadiusScale = 0.25f, Mass = 1.5f, HingeMin = 0f, HingeMax = 150f },
-
-            new() { Bone = HumanBodyBones.LeftUpperLeg, DirChildren = new[] { HumanBodyBones.LeftLowerLeg }, Parent = HumanBodyBones.Hips, Joint = JointKind.Ball, RadiusScale = 0.3f, Mass = 7f, ConeAngle = 45f, TwistRange = 20f },
-            new() { Bone = HumanBodyBones.LeftLowerLeg, DirChildren = new[] { HumanBodyBones.LeftFoot }, Parent = HumanBodyBones.LeftUpperLeg, Joint = JointKind.Hinge, RadiusScale = 0.28f, Mass = 4f, HingeMin = -150f, HingeMax = 0f },
-            new() { Bone = HumanBodyBones.RightUpperLeg, DirChildren = new[] { HumanBodyBones.RightLowerLeg }, Parent = HumanBodyBones.Hips, Joint = JointKind.Ball, RadiusScale = 0.3f, Mass = 7f, ConeAngle = 45f, TwistRange = 20f },
-            new() { Bone = HumanBodyBones.RightLowerLeg, DirChildren = new[] { HumanBodyBones.RightFoot }, Parent = HumanBodyBones.RightUpperLeg, Joint = JointKind.Hinge, RadiusScale = 0.28f, Mass = 4f, HingeMin = -150f, HingeMax = 0f },
-        };
-
         [MenuItem("Tools/BovineLabs/Ragdoll/Build On Selected")]
         private static void BuildOnSelected()
         {
@@ -79,7 +40,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         public static GameObject BuildRagdoll(Animator anm)
         {
-            CleanExisting(anm);
+            var settings = RagdollGeneratorSettings.FindOrDefault();
+
+            CleanExisting(anm, settings.bones);
 
             var root = new GameObject("Ragdoll");
             Undo.RegisterCreatedObjectUndo(root, "Build Ragdoll");
@@ -91,7 +54,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
             var bodies = new Dictionary<HumanBodyBones, PhysicsBodyAuthoring>();
 
             // Pass 1 — bodies + capsules + the runtime wiring (RagdollBodyAuthoring on body, OverrideTransformIK on bone).
-            foreach (var s in Specs)
+            foreach (var s in settings.bones)
             {
                 var boneT = anm.GetBoneTransform(s.Bone);
                 if (boneT == null)
@@ -152,8 +115,8 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 // excluded from itself. Collide ONLY with the solid world — Ground(0), Barrier(2), Prop(8) — NOT
                 // the character's own gameplay volumes (Character/Hitbox/Hurtbox/Trigger/CameraBlocker), which the
                 // corpse sits inside and would be violently ejected from. This is the fix for the ragdoll "explosion".
-                shape.BelongsTo = new PhysicsCategoryTags { Category31 = true };
-                shape.CollidesWith = new PhysicsCategoryTags { Category00 = true, Category02 = true, Category08 = true };
+                shape.BelongsTo = settings.belongsTo;
+                shape.CollidesWith = settings.collidesWith;
 
                 // Runtime wiring: link this body to its rig + bone, and make the bone follow this body when ragdolling.
                 var bodyAuth = bodyGO.AddComponent<RagdollBodyAuthoring>();
@@ -174,9 +137,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
             }
 
             // Pass 2 — joints (need both bodies to exist).
-            foreach (var s in Specs)
+            foreach (var s in settings.bones)
             {
-                if (s.Joint == JointKind.None)
+                if (s.Joint == RagdollJointKind.None)
                 {
                     continue;
                 }
@@ -190,7 +153,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var boneT = anm.GetBoneTransform(s.Bone);
                 float3 anchorLocal = bodyGO.transform.InverseTransformPoint(boneT.position); // proximal joint point
 
-                if (s.Joint == JointKind.Ball)
+                if (s.Joint == RagdollJointKind.Ball)
                 {
                     var j = Undo.AddComponent<RagdollJoint>(bodyGO);
                     j.ConnectedBody = parentBody;
@@ -230,7 +193,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         // Remove a previous build so the tool is re-runnable: the Ragdoll child (bodies+joints), the RagdollAuthoring
         // on the root, and the OverrideTransformIKAuthoring the tool added to each spec bone.
-        private static void CleanExisting(Animator anm)
+        private static void CleanExisting(Animator anm, RagdollBoneSpec[] specs)
         {
             var existing = anm.transform.Find("Ragdoll");
             if (existing != null)
@@ -244,7 +207,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 Undo.DestroyObjectImmediate(rootAuth);
             }
 
-            foreach (var s in Specs)
+            foreach (var s in specs)
             {
                 var boneT = anm.GetBoneTransform(s.Bone);
                 var ik = boneT != null ? boneT.gameObject.GetComponent<OverrideTransformIKAuthoring>() : null;

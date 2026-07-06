@@ -23,4 +23,11 @@ hand-typed `WeaponAnchorClip`.
 
 No reparenting (copy-transform via the sample pipeline); no velocity fakery (real momentum
 handed to physics on drop). Designer workflow in `HANDOFF_DESIGNERS.md` §10; full design in
-`WEAPON_SYSTEM_DESIGN.md`.
+`Documentation~/Architecture.md` § Weapon System Design.
+
+## Documentation
+
+- **Designers**: `HANDOFF_DESIGNERS.md` (package root) — how to author every track.
+- **Engineers**: `Documentation~/Architecture.md` — consolidated architecture, design
+  records (inertialization, ragdoll, weapon system), review notes, and open items.
+- **Backlog**: `TODO.md` — the full production audit and its implementation status.

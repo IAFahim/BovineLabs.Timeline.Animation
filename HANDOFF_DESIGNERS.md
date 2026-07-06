@@ -26,6 +26,8 @@ The track now has an **Override / Additive** blend-mode toggle. Override replace
 ## 5. Track offsets
 Only the **"Apply Transform Offsets"** offset mode is supported. Selecting any other offset mode logs a warning at bake and is ignored.
 
+⚠️ **Offsets (and Remove Start Offset) require Apply Root Motion on the rig.** Position/rotation offsets and `removeStartOffset` are applied only to the root-motion bone. If the bound `RigDefinitionAuthoring` has **Apply Root Motion OFF** (the showcase default), every offset field — on the track, on a blend-tree clip, and on the `TimelineAnimationStateAuthoring` fallback — is a **silent no-op** at runtime, and the Scene-view offset handles move a pose that will not actually move in game. The Validator flags this as **`[D6 Offsets Without Root Motion]`** with a one-click **Enable Root Motion** fix. Note: enabling root motion changes how the entity itself moves, so treat it as a deliberate choice, not just an offset toggle.
+
 ## 6. Blends & easing
 You have **three** ways to control transitions — pick per situation:
 1. **Per-clip ease / clip overlap** — drag a clip's ease-in/out handles, or overlap two clips on one timeline to crossfade. This is the exact Unity-native behavior and is faithful (not distorted).
@@ -33,6 +35,8 @@ You have **three** ways to control transitions — pick per situation:
 3. **Inertialization** (see §7) — momentum-preserving cuts; the best feel for combat. Off by default.
 
 Zero ease + zero global = a **true instant hard cut** (Unity parity). This now snaps consistently on **every** track — `RukhankaAnimationTrack` *and* `BlendTree2DTrack` — so a zero there really is a zero (the old "per-clip zero still smeared ~0.001s" quirk is gone).
+
+⚠️ **Global crossfade is capped at half the target clip's length.** A `blendIn/blendOutDuration` larger than half the clip it blends onto is shortened automatically (e.g. **0.4s onto a 0.3s clip becomes 0.15s**) so the blend always completes inside the clip. If a short clip blends faster than you expected, this floor is why.
 
 ## 7. Extras you didn't have in Unity Timeline
 
@@ -48,7 +52,7 @@ Blend-tree tracks (Rukhanka does the math; you author thresholds/weights):
 - **BlendTreeDirect track** — NEW. Explicit per-motion weights (no spatial algorithm); good for manual/additive/facial mixes. Optional normalize.
 
 Layer & transition:
-- **LayerWeight track** — NEW. Animate a whole layer's overall weight over time (fade an additive upper-body/overlay layer in/out) using the clip's ease handles. Meant for overlay layers (LayerIndex ≥ 1).
+- **LayerWeight track** — NEW. Animate a whole layer's overall weight over time (fade an additive upper-body/overlay layer in/out) using the clip's ease handles. Meant for overlay layers (LayerIndex ≥ 1). Point its **LayerIndex** at a layer a real animation track actually uses — a mismatch is a silent no-op the Validator flags as **`[D8 Layer Weight Orphan]`**. When **two** LayerWeight clips drive the **same** layer at once, the **maximum** multiplier wins (not product, not last-wins).
 - **Inertialization** — NEW (opt-in; `inertializationDuration` on the actor, 0 = off, try 0.1–0.3s). Momentum-preserving transitions: on a dominant-clip change it cuts to the new clip and decays a per-bone offset to zero, carrying the previous motion's momentum across the cut (no mush, no foot slide). Best paired with low/zero global blend. **Needs in-editor tuning** — the duration is a feel value.
   - Now the **full Bollo quintic** — it carries position **and velocity and acceleration** across the cut (not just position + velocity), for a smoother, less "poppy" settle.
   - **Loop-aware:** it also smooths a *raw loop seam* for a looping clip that is **not** using Continuous Loop, and is guarded so it never fires on a clean full-cycle wrap. (If a clip uses Continuous Loop there's no seam to smooth — the two features stack fine.)
@@ -65,7 +69,7 @@ Several long-standing rough edges are now **fixed** (kept here briefly so the ch
 - ✅ **Scene-view offset handles exist now** (was: offsets were typed numbers only). See below.
 
 Still worth knowing:
-- **BlendTree2D edit-mode preview shows the *dominant* motion, not the full blend.** Scrubbing now samples the nearest motion at the blend point (nearest-neighbor) instead of collapsing to bind pose — much more useful, but it is **not** the weighted blend. Trust the runtime for the real blended result.
+- **Blend-tree edit-mode preview shows the *dominant* motion, not the full blend.** All three blend-tree tracks now preview a single representative motion instead of collapsing to the bind pose: **2D** samples the nearest motion at the blend point (nearest-neighbor), **1D** previews the nearest-threshold motion (for a static Clip Value), **Direct** previews the highest-weight motion. Useful for framing a pose, but **not** the weighted blend — trust the runtime for the real blended result.
 - **Scene-view offset handles are an authoring aid, not the source of truth.** Clip/track position+rotation offsets now have **draggable Handles** in the Scene view, and the edit-mode preview honors offsets so the handle sits where the pose actually is. Caveats: the **runtime bake is the final truth** (verify there), and `OnSceneGUI` may **not fire** for a clip selected purely inside the Timeline window — select the track/clip so its inspector is active if the handle doesn't appear.
 - **WeaponAnchor / LookAt need a re-bake.** They depend on extra baked components, so previously-imported SubScenes must re-bake (happens automatically on scene load) before anchoring/look-at resume.
 - **AfterImageClip has no custom inspector** (it has no tunable fields, by design).
@@ -108,5 +112,22 @@ Menu **BovineLabs ▸ Animation ▸ Validate Timelines** opens a window that sca
 The same warnings also appear **inline** in the track inspectors, so you'll see the common ones without opening the window. Run the validator before any milestone / hand-off and clear it.
 
 **Defaults:** the Sample/showcase rig ships with `inertializationDuration` **0.15** so the demo feels good out of the box; the **library default stays 0** (inertialization is opt-in). **Foot IK stays on by default** (grounded).
+
+## 11. Preview vs Play Mode — what scrubbing actually shows
+
+The edit-mode Timeline preview exercises the **pose-sampling pipeline only** (unification, the gatherers, masks/layers, look-at, offset handles). Anything that **spawns entities** or runs in the **physics / fixed-step** loop is **Play Mode only** — scrubbing will look different from the game for those. When in doubt, verify in Play Mode; the runtime bake is always the final truth.
+
+| Feature | Edit-mode preview | Notes |
+|---|---|---|
+| Rukhanka single clip | ✅ Previews | Full pose; offsets honored only on a root-motion rig (§5) |
+| BlendTree 1D / 2D / Direct | ⚠️ Dominant motion only | Nearest-threshold (1D) / nearest-neighbor (2D) / highest-weight (Direct) — not the weighted blend |
+| Masks / layering / layer weight | ✅ Previews | The gather → unification pipeline runs in preview |
+| Fallback / Exit-Idle override | ✅ Previews | Restores the default fallback when no clip is active |
+| CharacterLookAt / AimIK | ✅ Previews | |
+| Transform offset handles | ✅ Previews | Handles + preview honor offsets on root-motion rigs (§5) |
+| Inertialization | ❌ Play Mode only | Pure pose filter, but not registered in the preview world — transitions preview *without* the momentum settle |
+| AfterImage ghosts | ❌ Play Mode only | Spawns ghost entities — never in preview |
+| Weapon equip / grip / drop / pickup | ❌ Play Mode only | Spawns/attaches entities; runs in TransformSystemGroup |
+| Ragdoll | ❌ Play Mode only | Physics fixed-step |
 
 *Status:* **Live in-editor verification PASSED** — regression-clean; Continuous Loop, zero-ease instant cut, inertialization (full quintic + loop-aware), and the Validator were all verified in play mode on real rigs. Remaining: designer **visual/feel sign-off**, and **commit/push both forks** — `BovineLabs.Timeline.Animation` **and** `com.rukhanka.animation`.

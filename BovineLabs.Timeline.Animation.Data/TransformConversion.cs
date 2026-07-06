@@ -7,10 +7,14 @@ namespace BovineLabs.Timeline.Animation
 {
     internal static class TransformConversion
     {
+        /// <summary>Shared near-singular guard: parent matrices whose |determinant| is at or below this are treated as
+        /// non-invertible (world pose passed through). #35: unify the epsilon across both conversions.</summary>
+        internal const float DeterminantEpsilon = 1e-8f;
+
         internal static bool WorldToParentLocal(in float4x4 parentL2W, float3 worldPos, quaternion worldRot,
             out float3 localPos, out quaternion localRot)
         {
-            if (math.abs(math.determinant(parentL2W)) <= 1e-8f)
+            if (math.abs(math.determinant(parentL2W)) <= DeterminantEpsilon)
             {
                 localPos = worldPos;
                 localRot = worldRot;
@@ -24,7 +28,7 @@ namespace BovineLabs.Timeline.Animation
         }
 
         internal static bool WorldPositionToParentLocal(in float4x4 parentL2W, float3 worldPos,
-            float epsilonDeterminant, out float3 localPos)
+            out float3 localPos, float epsilonDeterminant = DeterminantEpsilon)
         {
             if (math.abs(math.determinant(parentL2W)) <= epsilonDeterminant)
             {

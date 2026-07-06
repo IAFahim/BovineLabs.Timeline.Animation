@@ -7,6 +7,9 @@ namespace BovineLabs.Timeline.Animation.Authoring
     {
         public Transform target;
 
+        // #35: EDIT-TIME PREVIEW ONLY. This Mono LateUpdate mirrors the target in the editor scene view so designers
+        // can see the follow before entering play mode. At runtime the baked FollowPositionOnly component + the
+        // Burst FollowPositionOnlySystem own this behaviour — do not "de-duplicate" the two; they serve different modes.
         private void LateUpdate()
         {
             if (target == null) return;

@@ -1,3 +1,4 @@
+using BovineLabs.Core;
 using Rukhanka;
 using Unity.Burst;
 using Unity.Collections;
@@ -17,15 +18,53 @@ namespace BovineLabs.Timeline.Animation
 
         private const float MinDuration = 0.001f;
 
+        private EntityQuery _gpuGuardQuery;
+        private NativeReference<bool> _gpuWarned;
+
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<BlobDatabaseSingleton>();
+
+            // GPU parity guard (#3): actors carrying timeline-animation state (BlendGroupTimer) whose rig is on the
+            // GPU animation path (enabled GPUAnimationEngineTag). The GPU AnimationToProcess struct never gained the
+            // offset/removeStartOffset parity fields, so those features silently no-op there.
+            _gpuGuardQuery = SystemAPI.QueryBuilder().WithAll<BlendGroupTimer, GPUAnimationEngineTag>().Build();
+            _gpuWarned = new NativeReference<bool>(Allocator.Persistent);
+        }
+
+        public void OnDestroy(ref SystemState state)
+        {
+            _gpuWarned.Dispose();
+        }
+
+        // Advances a fading clip's normalized time. Looped clips wrap (frac); clamped clips pin at 1. Extracted so the
+        // integration math can be unit-tested independently of the Application.isPlaying scrub gate.
+        internal static float AdvanceNormalizedTime(float normalizedTime, float advance, bool looped)
+        {
+            return looped ? math.frac(normalizedTime + advance) : math.min(1f, normalizedTime + advance);
+        }
+
+        // Whether a reconciled entry should re-sync its NormalizedTime to the request's. Continuous-loop entries own
+        // their free-running phase once seeded and are only re-synced while scrubbing; everyone else tracks the
+        // request exactly. Extracted for unit testing.
+        internal static bool ShouldResyncPhase(bool continuousLoop, bool isScrubbing, bool phaseSeeded)
+        {
+            return !continuousLoop || isScrubbing || !phaseSeeded;
         }
 
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var blobDB = SystemAPI.GetSingleton<BlobDatabaseSingleton>();
+
+            if (!_gpuWarned.Value && !_gpuGuardQuery.IsEmptyIgnoreFilter && !_gpuGuardQuery.IsEmpty)
+            {
+                _gpuWarned.Value = true;
+                SystemAPI.GetSingleton<BLLogger>().LogError512(
+                    "[TimelineAnimation] A rig on the GPU animation path (GPUAnimationEngineTag) has timeline-animation " +
+                    "state. Timeline-animation features (position/rotation offsets, removeStartOffset, continuous loop, " +
+                    "inertialization) are UNSUPPORTED on the GPU animation engine and will be silently ignored.");
+            }
 
             var isScrubbing = false;
 #if UNITY_EDITOR
@@ -41,6 +80,7 @@ namespace BovineLabs.Timeline.Animation
                 // Optional per-actor layer-weight overrides written by TimelineLayerWeightTrackSystem. Absent on
                 // any actor with no LayerWeight track, in which case the multiplier defaults to 1 (no change).
                 LayerOverrides = SystemAPI.GetBufferLookup<LayerWeightOverride>(true),
+                CullLookup = SystemAPI.GetComponentLookup<CullAnimationsTag>(true),
             };
 
             state.Dependency = job.ScheduleParallel(state.Dependency);
@@ -57,6 +97,9 @@ namespace BovineLabs.Timeline.Animation
             // Optional, per-actor: authored layer-weight overrides keyed by LayerIndex. Absent => multiplier 1.
             [ReadOnly] public BufferLookup<LayerWeightOverride> LayerOverrides;
 
+            // Rukhanka culls pose computation for off-screen rigs via CullAnimationsTag. Absent on most actors.
+            [ReadOnly] public ComponentLookup<CullAnimationsTag> CullLookup;
+
             public float DeltaTime;
             public bool IsScrubbing;
 
@@ -70,13 +113,31 @@ namespace BovineLabs.Timeline.Animation
             {
                 atps.Clear();
 
+                // Off-screen rig (#15): Rukhanka skips pose computation for it, so integrating weights and emitting
+                // clips is wasted. Snap CurrentWeight to TargetWeight so an un-cull resumes without a half-blended
+                // pop, discard this frame's gathered requests, and emit nothing.
+                if (CullLookup.HasComponent(actor) && CullLookup.IsComponentEnabled(actor))
+                {
+                    for (var i = 0; i < smoothEntries.Length; i++)
+                    {
+                        var s = smoothEntries[i];
+                        s.CurrentWeight = s.TargetWeight;
+                        smoothEntries[i] = s;
+                    }
+
+                    blendEntries.Clear();
+                    return;
+                }
+
+                var timeScale = ResolveTimeScale(in blendEntries, ref timer);
+
                 ReconcileRequests(ref blendEntries, ref smoothEntries, IsScrubbing);
-                IntegrateWeights(ref smoothEntries, fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed);
+                IntegrateWeights(ref smoothEntries, fallbackData.BlendInSpeed, fallbackData.BlendOutSpeed, timeScale);
 
                 var baseLayer = fallbackData.LayerIndex;
                 var baseControl = BaseLayerControl(in smoothEntries, baseLayer);
 
-                EmitFallback(ref timer, in fallbackData, baseControl, ref atps);
+                EmitFallback(ref timer, in fallbackData, baseControl, timeScale, ref atps);
 
                 var layerSums = AccumulateOverrideSums(in smoothEntries);
                 EmitClips(actor, in smoothEntries, baseLayer, baseControl, in layerSums, ref atps);
@@ -84,6 +145,37 @@ namespace BovineLabs.Timeline.Animation
                 SortByLayer(ref atps);
 
                 blendEntries.Clear();
+            }
+
+            // Resolves the per-timeline playback speed that drives the fallback clock and crossfade ramps: the
+            // dominant (best-weight) active clip's TimeScale, or 1 when no clips are active (pure fallback idle) so a
+            // stale scale from a finished clip does not linger. Blend-tree requests leave TimeScale 0 until they
+            // thread scale; a resolved value of <=0 is treated as 1 (unscaled).
+            private static float ResolveTimeScale(
+                in DynamicBuffer<BlendGroupEntry> blendEntries,
+                ref BlendGroupTimer timer)
+            {
+                if (blendEntries.Length == 0)
+                {
+                    timer.TimeScale = 1f;
+                    return 1f;
+                }
+
+                var bestWeight = -1f;
+                var bestScale = 1f;
+                for (var i = 0; i < blendEntries.Length; i++)
+                {
+                    var e = blendEntries[i];
+                    if (e.Weight > bestWeight)
+                    {
+                        bestWeight = e.Weight;
+                        bestScale = e.TimeScale;
+                    }
+                }
+
+                var scale = bestScale > 0f ? bestScale : 1f;
+                timer.TimeScale = scale;
+                return scale;
             }
 
             private static void ReconcileRequests(
@@ -121,14 +213,11 @@ namespace BovineLabs.Timeline.Animation
                         // NOT be re-synced to the wrapping timeline localTime, otherwise the seam snaps back. We
                         // still take the request's NormalizedTime while scrubbing (scrub must land exactly), or the
                         // very first time to seed the phase. Non-continuous entries track localTime exactly, as before.
-                        if (!s.ContinuousLoop || isScrubbing)
+                        if (ShouldResyncPhase(s.ContinuousLoop, isScrubbing, s.PhaseSeeded))
                         {
                             s.NormalizedTime = request.NormalizedTime;
-                        }
-                        else if (!s.PhaseSeeded)
-                        {
-                            s.NormalizedTime = request.NormalizedTime;
-                            s.PhaseSeeded = true;
+                            if (s.ContinuousLoop && !isScrubbing)
+                                s.PhaseSeeded = true;
                         }
 
                         s.LayerIndex = request.LayerIndex;
@@ -174,7 +263,8 @@ namespace BovineLabs.Timeline.Animation
             private void IntegrateWeights(
                 ref DynamicBuffer<SmoothBlendGroupEntry> smoothEntries,
                 float blendInSpeed,
-                float blendOutSpeed)
+                float blendOutSpeed,
+                float timeScale)
             {
                 var blendInDur = blendInSpeed <= WeightEpsilon ? 0f : 1f / blendInSpeed;
                 var blendOutDur = blendOutSpeed <= WeightEpsilon ? 0f : 1f / blendOutSpeed;
@@ -194,7 +284,7 @@ namespace BovineLabs.Timeline.Animation
                     {
                         var rising = s.TargetWeight >= s.CurrentWeight;
                         var floorDur = math.min(rising ? blendInDur : blendOutDur, clipLen * 0.5f);
-                        var maxStep = floorDur <= WeightEpsilon ? 1f : DeltaTime / floorDur;
+                        var maxStep = floorDur <= WeightEpsilon ? 1f : DeltaTime * timeScale / floorDur;
                         s.CurrentWeight += math.clamp(s.TargetWeight - s.CurrentWeight, -maxStep, maxStep);
                     }
 
@@ -215,9 +305,7 @@ namespace BovineLabs.Timeline.Animation
                     else if (s.TargetWeight <= WeightEpsilon && hasClip)
                     {
                         var advance = (IsScrubbing ? 0f : DeltaTime) / clipLen;
-                        s.NormalizedTime = clipBlob.Value.looped
-                            ? math.frac(s.NormalizedTime + advance)
-                            : math.min(1f, s.NormalizedTime + advance);
+                        s.NormalizedTime = AdvanceNormalizedTime(s.NormalizedTime, advance, clipBlob.Value.looped);
                     }
 
                     smoothEntries[i] = s;
@@ -245,6 +333,7 @@ namespace BovineLabs.Timeline.Animation
                 ref BlendGroupTimer timer,
                 in FallbackBlend fallbackData,
                 float baseControl,
+                float timeScale,
                 ref DynamicBuffer<AnimationToProcessComponent> atps)
             {
                 var fallbackWeight = BlendLayerMath.FallbackWeight(baseControl);
@@ -263,7 +352,7 @@ namespace BovineLabs.Timeline.Animation
 
                 var duration = math.max(MinDuration, fallbackClip.Value.length);
 
-                var fallbackAdvance = (IsScrubbing ? 0f : DeltaTime) / duration;
+                var fallbackAdvance = (IsScrubbing ? 0f : DeltaTime) * timeScale / duration;
 
                 if (fallbackData.PlaybackMode == FallbackPlaybackMode.Hold)
                 {

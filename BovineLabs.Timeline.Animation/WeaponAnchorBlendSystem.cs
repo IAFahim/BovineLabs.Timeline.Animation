@@ -19,10 +19,12 @@ namespace BovineLabs.Timeline.Animation
         private const float RelaxRate = 12f;
         private const float RestPositionEpsilonSq = 1e-8f;
         private const float RestRotationDot = 0.99999f;
+        private const float VelocitySmoothing = 0.5f;
 
         private NativeParallelMultiHashMap<Entity, WeaponAnchorSample> _samples;
         private NativeList<Entity> _weapons;
         private EntityQuery _clipQuery;
+        private EntityQuery _resolveQuery;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -32,6 +34,16 @@ namespace BovineLabs.Timeline.Animation
             _clipQuery = SystemAPI.QueryBuilder()
                 .WithAll<ClipActive, TimelineActive, WeaponAnchorData, TrackBinding>()
                 .Build();
+            _resolveQuery = SystemAPI.QueryBuilder()
+                .WithAllRW<LocalTransform>()
+                .WithAllRW<WeaponAnchorSample>()
+                .WithAllRW<WeaponAnchorRest>()
+                .Build();
+
+            // A24: gate on the persistent weapon marker (WeaponAnchorSample), NOT the active-clip query. With no
+            // weapon in the world there is nothing to gather or resolve; but while a weapon exists the resolve/apply
+            // pass must keep running after the last clip ends to ease the weapon back to its rest pose.
+            state.RequireForUpdate<WeaponAnchorSample>();
         }
 
         [BurstCompile]
@@ -71,18 +83,32 @@ namespace BovineLabs.Timeline.Animation
                 Buffers = state.GetBufferLookup<WeaponAnchorSample>()
             }.Schedule(_weapons, 16, state.Dependency);
 
-            state.Dependency = new ResolveJob
+            // A11: resolve is split into a read-only gather that computes the final world poses (reading bone/parent
+            // LocalTransform lookups only) and an apply pass that writes each weapon's own `ref LocalTransform` with no
+            // LocalTransform lookup at all — so a weapon that ever lands in another weapon's bone/parent chain can't
+            // race a same-frame read against a write. The poses hand off by dense query index (identical query).
+            var poses = new NativeArray<ResolvedPose>(_resolveQuery.CalculateEntityCount(), Allocator.TempJob);
+
+            state.Dependency = new GatherPoseJob
             {
-                DeltaTime = SystemAPI.Time.DeltaTime,
                 LocalToWorldLookup = state.GetComponentLookup<LocalToWorld>(true),
                 LocalTransformLookup = state.GetComponentLookup<LocalTransform>(true),
                 PostTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true),
                 ParentLookup = state.GetComponentLookup<Parent>(true),
                 AttachmentLookup = state.GetComponentLookup<WeaponAttachment>(true),
                 AttachmentAnchorLookup = state.GetComponentLookup<WeaponAttachmentAnchor>(true),
+                Poses = poses
+            }.ScheduleParallel(_resolveQuery, state.Dependency);
+
+            state.Dependency = new ApplyPoseJob
+            {
+                DeltaTime = SystemAPI.Time.DeltaTime,
+                Poses = poses,
                 EaseLookup = state.GetComponentLookup<WeaponAttachEase>(),
                 PoseVelocityLookup = state.GetComponentLookup<WeaponPoseVelocity>()
-            }.ScheduleParallel(state.Dependency);
+            }.ScheduleParallel(_resolveQuery, state.Dependency);
+
+            poses.Dispose(state.Dependency);
         }
 
         [BurstCompile]
@@ -151,29 +177,35 @@ namespace BovineLabs.Timeline.Animation
             }
         }
 
-        [BurstCompile]
-        private partial struct ResolveJob : IJobEntity
+        /// <summary> Final world pose computed by <see cref="GatherPoseJob" />, handed to <see cref="ApplyPoseJob" /> by query index. </summary>
+        private struct ResolvedPose
         {
-            public float DeltaTime;
+            public float3 WorldPosition;
+            public quaternion WorldRotation;
+            public float4x4 ParentWorld;
+            public bool Anchored;
+            public bool HasParentWorld;
+        }
 
+        /// <summary>
+        /// Read-only phase of the resolve: computes each weapon's target world pose and fresh parent-world matrix from
+        /// bone/parent LocalTransform lookups (never touching the weapon's own LocalTransform), and clears its consumed
+        /// sample buffer. Writes only into <see cref="Poses" /> at the dense query index. No LocalTransform is written,
+        /// so the RO lookups can't alias a write.
+        /// </summary>
+        [BurstCompile]
+        [WithAll(typeof(WeaponAnchorRest))]
+        private partial struct GatherPoseJob : IJobEntity
+        {
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
-
-            // Reads only parent/bone entities via BoneWorld's walk — never the executing weapon, whose
-            // LocalTransform is the RW `ref transform` below. Disjoint by construction; the safety system
-            // can't see that a RW type-handle and a same-type lookup never touch the same entity here.
-            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<LocalTransform> LocalTransformLookup;
-
+            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
             [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
             [ReadOnly] public ComponentLookup<WeaponAttachment> AttachmentLookup;
             [ReadOnly] public ComponentLookup<WeaponAttachmentAnchor> AttachmentAnchorLookup;
+            [NativeDisableParallelForRestriction] public NativeArray<ResolvedPose> Poses;
 
-            // Both written only through the executing entity itself; never another chunk's.
-            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponAttachEase> EaseLookup;
-            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponPoseVelocity> PoseVelocityLookup;
-
-            private void Execute(Entity entity, ref DynamicBuffer<WeaponAnchorSample> samples,
-                ref LocalTransform transform, ref WeaponAnchorRest rest)
+            private void Execute(Entity entity, [EntityIndexInQuery] int index, ref DynamicBuffer<WeaponAnchorSample> samples)
             {
                 var anchored = AnchorMath.WeightedBlend(samples, out var worldPosition, out var worldRotation);
                 samples.Clear();
@@ -195,7 +227,64 @@ namespace BovineLabs.Timeline.Animation
                     anchored = true;
                 }
 
-                if (anchored)
+                // A4: this runs before LocalToWorldSystem, so LocalToWorld is one frame stale. Recompute the parent
+                // world matrix from fresh LocalTransform; fall back to the cached LocalToWorld only for parents
+                // outside the LocalTransform hierarchy.
+                var parentWorld = float4x4.identity;
+                var hasParentWorld = anchored &&
+                                     ParentLookup.TryGetComponent(entity, out var parent) &&
+                                     TryGetFreshWorld(parent.Value, out parentWorld);
+
+                Poses[index] = new ResolvedPose
+                {
+                    Anchored = anchored,
+                    WorldPosition = worldPosition,
+                    WorldRotation = worldRotation,
+                    HasParentWorld = hasParentWorld,
+                    ParentWorld = parentWorld,
+                };
+            }
+
+            private bool TryGetFreshWorld(Entity entity, out float4x4 world)
+            {
+                if (BoneWorld.TryComputeWorldMatrix(entity, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out world))
+                    return true;
+
+                if (LocalToWorldLookup.TryGetComponent(entity, out var l2w))
+                {
+                    world = l2w.Value;
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Write phase of the resolve: applies the pre-computed <see cref="ResolvedPose" /> to each weapon's own
+        /// <c>ref LocalTransform</c>, running the pickup ease, drop-velocity EMA and relax-to-rest against the weapon's
+        /// own state only. Reads no LocalTransform lookup, so the write can't alias another job's read.
+        /// </summary>
+        [BurstCompile]
+        [WithAll(typeof(WeaponAnchorSample))]
+        private partial struct ApplyPoseJob : IJobEntity
+        {
+            public float DeltaTime;
+            [ReadOnly] public NativeArray<ResolvedPose> Poses;
+
+            // Both written only through the executing entity itself; never another chunk's.
+            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponAttachEase> EaseLookup;
+            [NativeDisableParallelForRestriction] public ComponentLookup<WeaponPoseVelocity> PoseVelocityLookup;
+
+            private void Execute(Entity entity, [EntityIndexInQuery] int index,
+                ref LocalTransform transform, ref WeaponAnchorRest rest)
+            {
+                var pose = Poses[index];
+                var worldPosition = pose.WorldPosition;
+                var worldRotation = pose.WorldRotation;
+
+                if (pose.Anchored)
                 {
                     // Anchored this frame: snapshot the pre-attach pose on the activation edge, then drive the bone pose.
                     if (!rest.Captured)
@@ -205,12 +294,8 @@ namespace BovineLabs.Timeline.Animation
                         rest.Captured = true;
                     }
 
-                    // A4: this runs before LocalToWorldSystem, so LocalToWorld is one frame stale.
-                    // Recompute the parent world matrix from fresh LocalTransform; fall back to the
-                    // cached LocalToWorld only for parents outside the LocalTransform hierarchy.
-                    var parentWorld = float4x4.identity;
-                    var hasParentWorld = ParentLookup.TryGetComponent(entity, out var parent) &&
-                                         TryGetFreshWorld(parent.Value, out parentWorld);
+                    var parentWorld = pose.ParentWorld;
+                    var hasParentWorld = pose.HasParentWorld;
 
                     // Pickup ease: relax from the current (ground) pose toward the anchor target instead of
                     // snapping — the detach relax math run in the attach direction.
@@ -242,19 +327,33 @@ namespace BovineLabs.Timeline.Animation
                     }
 
                     // Track the blended pose's world velocity so Drop can hand a believable throw to physics.
+                    // The tracked value is an EMA of the per-frame finite difference (seeded exact on the first
+                    // sample) so a single hitch frame at the drop moment can't produce an absurd throw.
                     if (PoseVelocityLookup.TryGetComponent(entity, out var velocity))
                     {
                         if (velocity.HasPrev != 0 && DeltaTime > 0f)
                         {
-                            velocity.Linear = (worldPosition - velocity.PrevPosition) / DeltaTime;
+                            var instantLinear = (worldPosition - velocity.PrevPosition) / DeltaTime;
 
                             var dq = math.mul(worldRotation, math.inverse(velocity.PrevRotation));
                             dq.value = math.select(dq.value, -dq.value, dq.value.w < 0f);
                             var axisLengthSq = math.lengthsq(dq.value.xyz);
-                            velocity.Angular = axisLengthSq > 1e-12f
+                            var instantAngular = axisLengthSq > 1e-12f
                                 ? dq.value.xyz * math.rsqrt(axisLengthSq) *
                                   (2f * math.acos(math.clamp(dq.value.w, -1f, 1f)) / DeltaTime)
                                 : float3.zero;
+
+                            if (velocity.HasVelocity != 0)
+                            {
+                                velocity.Linear = math.lerp(velocity.Linear, instantLinear, VelocitySmoothing);
+                                velocity.Angular = math.lerp(velocity.Angular, instantAngular, VelocitySmoothing);
+                            }
+                            else
+                            {
+                                velocity.Linear = instantLinear;
+                                velocity.Angular = instantAngular;
+                                velocity.HasVelocity = 1;
+                            }
                         }
 
                         velocity.PrevPosition = worldPosition;
@@ -294,21 +393,6 @@ namespace BovineLabs.Timeline.Animation
                     transform.Rotation = rest.Rotation;
                     rest.Captured = false;
                 }
-            }
-
-            private bool TryGetFreshWorld(Entity entity, out float4x4 world)
-            {
-                if (BoneWorld.TryComputeWorldMatrix(entity, LocalTransformLookup, ParentLookup,
-                        PostTransformMatrixLookup, out world))
-                    return true;
-
-                if (LocalToWorldLookup.TryGetComponent(entity, out var l2w))
-                {
-                    world = l2w.Value;
-                    return true;
-                }
-
-                return false;
             }
         }
     }

@@ -21,6 +21,11 @@ namespace BovineLabs.Timeline.Animation
         public bool RemoveStartOffset;
         public bool ApplyFootIK;
 
+        // Per-timeline playback speed of the clip that produced this request (the source clip's TimeTransform.Scale).
+        // Consumed by the unification system to scale the fallback clock and crossfade weight ramps so they slow with
+        // per-timeline time-scale. Blend-tree gatherers do not thread this yet and leave it 0 (treated as 1).
+        public float TimeScale;
+
         // Continuous-phase loop mode: when true this entry advances its own NormalizedTime by PhaseVelocity
         // (cycles/sec) each frame instead of reading the wrapping timeline localTime, so a looping clip never
         // snaps mid-cycle when the PlayableDirector wraps at the timeline duration. Default false = current behavior.
@@ -53,11 +58,15 @@ namespace BovineLabs.Timeline.Animation
         public bool PhaseSeeded;
     }
 
-    public struct BlendGroupTimer : IComponentData, IEnableableComponent
+    public struct BlendGroupTimer : IComponentData
     {
         public float FallbackAccumulatedTime;
         public Hash128 PreviousFallbackClipHash;
-        public float BaseLayerControl;
+
+        // Effective per-timeline playback speed of the actor's dominant (best-weight) active clip this frame, or 1
+        // while no clips are active. Drives the fallback clock and crossfade ramps so idle animation slows with
+        // per-timeline time-scale.
+        public float TimeScale;
     }
 
     public struct FallbackBlend : IComponentData

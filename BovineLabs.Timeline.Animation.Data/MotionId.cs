@@ -25,5 +25,13 @@ namespace BovineLabs.Timeline.Animation
             var id = h.DigestHash64().x;
             return id == Fallback ? Fallback - 1u : id;
         }
+
+        // Blend-tree motions have no clip entity of their own; each motion slot is disambiguated by its
+        // index in the track's motion buffer. Encoded as Entity { Index = motionIndex, Version = 0 } so the
+        // hash matches the historic new Entity { Index = motionIndex } idiom the blend-tree systems used.
+        public static uint ComputeForMotion(Entity track, int layerIndex, Hash128 clipHash, int motionIndex)
+        {
+            return Compute(track, layerIndex, clipHash, new Entity { Index = motionIndex });
+        }
     }
 }

@@ -47,7 +47,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
 
         [Header("Exit / Fallback Override (Optional)")]
         [Tooltip(
-            "Idle/fallback clip this track latches when it is the dominant active track. Lets a stance track own the idle so movement falls back to its idle, not the default idle. Highest LayerIndex wins among simultaneously active overrides; the latch persists until another override track takes over.")]
+            "Idle/fallback clip this track owns while any of its clips is active on the target. Lets a stance track own the idle so movement falls back to its idle, not the default idle. Highest LayerIndex wins among simultaneously active overrides; when none of this track's clips are active the default fallback returns (no persistent latch).")]
         public AnimationClip ExitIdleClip;
 
         [Tooltip("Time in seconds to blend into this fallback clip. 0 = instant cut.")] [Min(0f)]
@@ -176,7 +176,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     finally
                     {
                         foreach (var (clip, settings) in restores)
+                        {
                             AnimationUtility.SetAnimationClipSettings(clip, settings);
+                            ClipSettingsRestoreGuard.Untrack(clip);
+                        }
                     }
                 }
             }
@@ -232,6 +235,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 var overridden = AnimationUtility.GetAnimationClipSettings(clip);
                 overridden.additiveReferencePoseClip = src.additiveReferencePoseClip;
                 overridden.additiveReferencePoseTime = src.additiveReferencePoseTime;
+                ClipSettingsRestoreGuard.Track(clip, original);
                 AnimationUtility.SetAnimationClipSettings(clip, overridden);
 
                 restores.Add((clip, original));
@@ -276,6 +280,60 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 RemoveStartOffset = true,
                 ApplyFootIK = true
             });
+        }
+    }
+
+    // The reference-pose bakers temporarily mutate a shared .anim asset's import settings and restore them in a
+    // finally. A hard editor crash, ExitGUI, or importer re-entry between the mutate and the restore would leave that
+    // settings change on disk, silently altering the clip for every other consumer. This guard flushes any still-
+    // pending restore on domain reload or editor quit so an interrupted bake can never ship a modified source clip.
+    internal static class ClipSettingsRestoreGuard
+    {
+        private static readonly Dictionary<AnimationClip, AnimationClipSettings> Pending = new();
+        private static bool hooked;
+
+        public static void Track(AnimationClip clip, AnimationClipSettings original)
+        {
+            if (clip == null)
+            {
+                return;
+            }
+
+            EnsureHooked();
+            Pending.TryAdd(clip, original);
+        }
+
+        public static void Untrack(AnimationClip clip)
+        {
+            if (clip != null)
+            {
+                Pending.Remove(clip);
+            }
+        }
+
+        private static void EnsureHooked()
+        {
+            if (hooked)
+            {
+                return;
+            }
+
+            hooked = true;
+            AssemblyReloadEvents.beforeAssemblyReload += Flush;
+            EditorApplication.quitting += Flush;
+        }
+
+        private static void Flush()
+        {
+            foreach (var kv in Pending)
+            {
+                if (kv.Key != null)
+                {
+                    AnimationUtility.SetAnimationClipSettings(kv.Key, kv.Value);
+                }
+            }
+
+            Pending.Clear();
         }
     }
 }

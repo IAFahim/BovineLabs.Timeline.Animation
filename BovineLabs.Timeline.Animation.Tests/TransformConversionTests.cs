@@ -58,7 +58,7 @@ namespace BovineLabs.Timeline.Animation.Tests
         {
             var worldPos = new float3(4f, 5f, 6f);
 
-            var ok = TransformConversion.WorldPositionToParentLocal(default, worldPos, math.EPSILON,
+            var ok = TransformConversion.WorldPositionToParentLocal(default, worldPos,
                 out var localPos);
 
             Assert.IsFalse(ok);
@@ -72,7 +72,7 @@ namespace BovineLabs.Timeline.Animation.Tests
                 quaternion.EulerXYZ(0.4f, -0.6f, 0.8f), new float3(1f));
             var worldPos = new float3(9f, -2f, 5f);
 
-            var ok = TransformConversion.WorldPositionToParentLocal(parentL2W, worldPos, math.EPSILON,
+            var ok = TransformConversion.WorldPositionToParentLocal(parentL2W, worldPos,
                 out var localPos);
 
             Assert.IsTrue(ok);

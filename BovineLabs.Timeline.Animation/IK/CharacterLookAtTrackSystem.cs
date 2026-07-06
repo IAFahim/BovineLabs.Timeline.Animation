@@ -27,7 +27,9 @@ namespace BovineLabs.Timeline.Animation
 
         private TrackBlendImpl<CharacterLookAtData, CharacterLookAtAnimated> _blendImpl;
 
-        private NativeReference<bool> _missingRigWarned;
+        // Per-entity so a misconfigured character does not silence the warning for every other one (a global latch
+        // never re-warns under CoreCLR, which has no domain reload).
+        private NativeParallelHashSet<Entity> _missingRigWarned;
 
         private UnsafeComponentLookup<Targets> _targetsLookup;
         private UnsafeComponentLookup<EntityLinkSource> _sourcesLookup;
@@ -36,6 +38,7 @@ namespace BovineLabs.Timeline.Animation
         private ComponentLookup<LocalToWorld> _ltwLookup;
         private ComponentLookup<LocalTransform> _localTransformLookup;
         private ComponentLookup<Parent> _parentLookup;
+        private ComponentLookup<PostTransformMatrix> _postTransformMatrixLookup;
         private ComponentLookup<CharacterLookAtTarget> _lookAtTargetLookup;
         private ComponentLookup<AimIKComponent> _aimIKLookup;
 
@@ -51,10 +54,16 @@ namespace BovineLabs.Timeline.Animation
             _ltwLookup = state.GetComponentLookup<LocalToWorld>(true);
             _localTransformLookup = state.GetComponentLookup<LocalTransform>();
             _parentLookup = state.GetComponentLookup<Parent>(true);
+            _postTransformMatrixLookup = state.GetComponentLookup<PostTransformMatrix>(true);
             _lookAtTargetLookup = state.GetComponentLookup<CharacterLookAtTarget>(true);
             _aimIKLookup = state.GetComponentLookup<AimIKComponent>();
 
-            _missingRigWarned = new NativeReference<bool>(Allocator.Persistent);
+            _missingRigWarned = new NativeParallelHashSet<Entity>(256, Allocator.Persistent);
+
+            // A24: gate on the persistent look-at rig component (AimIKComponent), NOT the active-clip query. With no
+            // look-at rig there is nothing to prepare, blend, relax or write; while a rig exists the RelaxJob must
+            // keep running after the last clip ends to ease the AimIK weight back to rest.
+            state.RequireForUpdate<AimIKComponent>();
         }
 
         [BurstCompile]
@@ -74,6 +83,7 @@ namespace BovineLabs.Timeline.Animation
             _ltwLookup.Update(ref state);
             _localTransformLookup.Update(ref state);
             _parentLookup.Update(ref state);
+            _postTransformMatrixLookup.Update(ref state);
             _lookAtTargetLookup.Update(ref state);
             _aimIKLookup.Update(ref state);
 
@@ -99,6 +109,7 @@ namespace BovineLabs.Timeline.Animation
                 LookAtTargetLookup = _lookAtTargetLookup,
                 LocalTransformLookup = _localTransformLookup,
                 ParentLookup = _parentLookup,
+                PostTransformMatrixLookup = _postTransformMatrixLookup,
                 LtwLookup = _ltwLookup,
                 AimIKLookup = _aimIKLookup,
                 Logger = SystemAPI.GetSingleton<BLLogger>(),
@@ -183,13 +194,14 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public NativeParallelHashMap<Entity, MixData<CharacterLookAtData>>.ReadOnly BlendData;
             [ReadOnly] public ComponentLookup<CharacterLookAtTarget> LookAtTargetLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
+            [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
             [ReadOnly] public ComponentLookup<LocalToWorld> LtwLookup;
 
             public ComponentLookup<LocalTransform> LocalTransformLookup;
             public ComponentLookup<AimIKComponent> AimIKLookup;
 
             public BLLogger Logger;
-            public NativeReference<bool> MissingRigWarned;
+            public NativeParallelHashSet<Entity> MissingRigWarned;
 
             public void Execute()
             {
@@ -205,9 +217,8 @@ namespace BovineLabs.Timeline.Animation
             {
                 if (!LookAtTargetLookup.TryGetComponent(entity, out var lookAtTarget))
                 {
-                    if (!MissingRigWarned.Value)
+                    if (MissingRigWarned.Add(entity))
                     {
-                        MissingRigWarned.Value = true;
                         Logger.LogWarning512(
                             "[CharacterLookAt] A look-at clip is active but the bound character has no CharacterLookAtTarget rig (run Build Look-At Rig on the character). Look-at will be skipped.");
                     }
@@ -215,23 +226,26 @@ namespace BovineLabs.Timeline.Animation
                     return;
                 }
 
-                var angleLimits = mixData.Value1.AngleLimits;
-
                 var blended = JobHelpers.Blend<CharacterLookAtData, CharacterLookAtMixer>(ref mixData, default);
 
                 if (math.any(math.isnan(blended.LookPoint))) return;
 
-                var minA = math.min(angleLimits.x, angleLimits.y);
-                var maxA = math.max(angleLimits.x, angleLimits.y);
+                // Blended limits (CharacterLookAtMixer.Lerp already interpolates AngleLimits) rather than slot 1's raw
+                // limits, so two overlapping clips with different limits blend instead of snapping to whichever is first.
+                var minA = math.min(blended.AngleLimits.x, blended.AngleLimits.y);
+                var maxA = math.max(blended.AngleLimits.x, blended.AngleLimits.y);
 
                 var targetEntity = lookAtTarget.TargetEntity;
                 if (targetEntity != Entity.Null && LocalTransformLookup.HasComponent(targetEntity))
                 {
                     var targetTransform = LocalTransformLookup[targetEntity];
 
+                    // This runs before LocalToWorldSystem, so the parent's LocalToWorld is one frame stale — recompute
+                    // the parent's world matrix from fresh LocalTransform (LocalToWorld fallback for non-hierarchy
+                    // parents) so a head tracking a moving character does not trail a frame behind.
                     if (ParentLookup.TryGetComponent(targetEntity, out var parent) &&
-                        LtwLookup.TryGetComponent(parent.Value, out var parentLtw))
-                        targetTransform.Position = math.transform(math.inverse(parentLtw.Value), blended.LookPoint);
+                        TryGetFreshWorld(parent.Value, out var parentWorld))
+                        targetTransform.Position = math.transform(math.inverse(parentWorld), blended.LookPoint);
                     else
                         targetTransform.Position = blended.LookPoint;
 
@@ -244,14 +258,28 @@ namespace BovineLabs.Timeline.Animation
                     aim.angleLimits = new float2(minA, maxA);
                     AimIKLookup[lookAtTarget.AimIKEntity] = aim;
                 }
-                else if (!MissingRigWarned.Value)
+                else if (MissingRigWarned.Add(entity))
                 {
                     // CharacterLookAtTarget is baked unconditionally, so the absent-rig warning above never
                     // fires when only the AimIK half is missing. Surface it here instead of silently no-opping.
-                    MissingRigWarned.Value = true;
                     Logger.LogWarning512(
                         "[CharacterLookAt] A look-at clip is active but the bound character's look-at rig is not built (no AimIK on the head bone — run Build Look-At Rig). Look-at will be skipped.");
                 }
+            }
+
+            private bool TryGetFreshWorld(Entity entity, out float4x4 world)
+            {
+                if (BoneWorld.TryComputeWorldMatrix(entity, LocalTransformLookup, ParentLookup,
+                        PostTransformMatrixLookup, out world))
+                    return true;
+
+                if (LtwLookup.TryGetComponent(entity, out var l2w))
+                {
+                    world = l2w.Value;
+                    return true;
+                }
+
+                return false;
             }
         }
     }

@@ -34,14 +34,53 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public ClipCaps clipCaps => ClipCaps.All;
 
 #if UNITY_EDITOR
+        // Back-reference stamped by BlendTree1DTrack.CreateTrackMixer so the edit-mode preview can reach the track's
+        // Motions (a clip's PlayableAsset otherwise has no clean handle on its owning track). Not serialized.
+        [System.NonSerialized] internal BlendTree1DTrack EditorPreviewTrack;
 
         public override Playable CreatePlayable(PlayableGraph graph, GameObject owner)
         {
-            // Documented gap: edit-mode scrub shows the bind pose, not a blended pose. The motions
-            // (AnimationClips + their thresholds) live on BlendTree1DTrack, not on this clip, and
-            // Timeline gives a clip's PlayableAsset no clean back-reference to its parent track here.
             if (!Application.isPlaying)
-                return AnimationMixerPlayable.Create(graph);
+            {
+                var motions = EditorPreviewTrack?.Motions;
+
+                // No track back-ref or no motions: fall back to the empty mixer (bind pose), exactly as before.
+                if (motions == null || motions.Count == 0)
+                    return AnimationMixerPlayable.Create(graph);
+
+                // Nearest-threshold approximation, NOT the runtime weighted blend: pick the single motion whose scalar
+                // threshold is closest to the sample point and preview just that clip. The sample point is the authored
+                // BlendParameter for ClipValue; for velocity/link-driven kinds there is no live value in edit mode, so
+                // we sample 0 (idle). Trust runtime for the true blended pose.
+                var sample = ReadKind == BlendDirectionReadKind.ClipValue ? BlendParameter : 0f;
+
+                AnimationClip dominant = null;
+                var bestDistance = float.MaxValue;
+
+                foreach (var motion in motions)
+                {
+                    if (motion?.clip == null)
+                        continue;
+
+                    var distance = Mathf.Abs(motion.threshold - sample);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        dominant = motion.clip;
+                    }
+                }
+
+                if (dominant == null)
+                    return AnimationMixerPlayable.Create(graph);
+
+                var asset = CreateInstance<AnimationPlayableAsset>();
+                asset.clip = dominant;
+                asset.applyFootIK = applyFootIK;
+                asset.removeStartOffset = removeStartOffset;
+                asset.position = positionOffset;
+                asset.rotation = Quaternion.Euler(eulerAnglesOffset);
+                return asset.CreatePlayable(graph, owner);
+            }
 
             return base.CreatePlayable(graph, owner);
         }

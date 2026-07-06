@@ -104,9 +104,7 @@ namespace BovineLabs.Timeline.Animation
                 {
                     // ENTER — snap onto the bone's current animated pose, applying the authored bone-local offset
                     // so the capsule keeps the orientation its joint pivots were baked in (else the solver explodes).
-                    // ponytail: snap DISABLED for a diagnostic — leave bodies at their baked (bind) pose to test
-                    // whether snapping to the animated pose is what violates the joints and rockets the ragdoll.
-                    if (false && LocalToWorld.TryGetComponent(body.Bone, out var boneLtw))
+                    if (LocalToWorld.TryGetComponent(body.Bone, out var boneLtw))
                     {
                         var boneRot = boneLtw.Rotation;
                         transform.Position = boneLtw.Position + math.mul(boneRot, body.BoneLocalPos);
@@ -157,7 +155,8 @@ namespace BovineLabs.Timeline.Animation
 
             private void Execute([ChunkIndexInQuery] int sortKey, Entity entity, in PhysicsConstrainedBodyPair pair)
             {
-                if (!Bodies.TryGetComponent(pair.EntityA, out var body))
+                if (!Bodies.TryGetComponent(pair.EntityA, out var body) &&
+                    !Bodies.TryGetComponent(pair.EntityB, out body))
                 {
                     return;
                 }

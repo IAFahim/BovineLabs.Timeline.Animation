@@ -104,6 +104,29 @@ namespace BovineLabs.Timeline.Animation.Tests
                 "a disabled WeaponAttachment must fall back to the timeline owner");
         }
 
+        [Test]
+        public void RebuildsBoneMapWhenRigAddedLater()
+        {
+            CreateRegistry(weaponId: 7, defaultGrip: 1);
+
+            // One persistent system instance so the order-version change detection (not a fresh OnCreate) is exercised.
+            var system = World.CreateSystem<WeaponGripSampleSystem>();
+
+            var (firstHolder, firstRight, _) = CreateRig();
+            var firstClip = CreateClip(CreateWeapon(7), firstHolder, OneHand);
+            system.Update(WorldUnmanaged);
+            Manager.CompleteAllTrackedJobs();
+            Assert.AreEqual(firstRight, Manager.GetComponentData<WeaponAnchorData>(firstClip).Bone);
+
+            // A rig created after the first build must appear in the rebuilt map — invalidation must actually fire.
+            var (secondHolder, secondRight, _) = CreateRig();
+            var secondClip = CreateClip(CreateWeapon(7), secondHolder, OneHand);
+            system.Update(WorldUnmanaged);
+            Manager.CompleteAllTrackedJobs();
+            Assert.AreEqual(secondRight, Manager.GetComponentData<WeaponAnchorData>(secondClip).Bone,
+                "a rig created after the first build must be in the rebuilt bone map (order-version invalidation)");
+        }
+
         private void Update()
         {
             var system = World.CreateSystem<WeaponGripSampleSystem>();

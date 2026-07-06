@@ -18,10 +18,10 @@ namespace BovineLabs.Timeline.Animation.Authoring
         [Tooltip("How the fallback animation wraps: Loop restarts, Clamp stops at end, Hold stays on last frame.")]
         public FallbackPlaybackMode fallbackPlaybackMode = FallbackPlaybackMode.Loop;
 
-        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs).")] [Min(0f)]
+        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs). Capped at half the target clip's length, so a blend onto a very short clip is shortened automatically (e.g. 0.4s onto a 0.3s clip becomes 0.15s).")] [Min(0f)]
         public float blendInDuration = 0.2f;
 
-        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs).")] [Min(0f)]
+        [Tooltip("Global crossfade time in seconds. Smooths every transition INCLUDING switches between separate timelines (trackA ending -> trackB starting), where per-clip ease alone cannot crossfade. 0 = snap instantly (hard cut / per-clip ease governs). Capped at half the target clip's length, so a blend onto a very short clip is shortened automatically (e.g. 0.4s onto a 0.3s clip becomes 0.15s).")] [Min(0f)]
         public float blendOutDuration = 0.2f;
 
         [Header("Fallback Transform Offsets")] public Vector3 positionOffset = Vector3.zero;
@@ -138,6 +138,7 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     var overridden = AnimationUtility.GetAnimationClipSettings(clip);
                     overridden.additiveReferencePoseClip = authoring.fallbackAdditiveReferencePoseClip;
                     overridden.additiveReferencePoseTime = authoring.fallbackAdditiveReferencePoseTime;
+                    ClipSettingsRestoreGuard.Track(clip, originalSettings);
                     AnimationUtility.SetAnimationClipSettings(clip, overridden);
                 }
 
@@ -162,7 +163,11 @@ namespace BovineLabs.Timeline.Animation.Authoring
                 }
                 finally
                 {
-                    if (applyRefPose) AnimationUtility.SetAnimationClipSettings(clip, originalSettings);
+                    if (applyRefPose)
+                    {
+                        AnimationUtility.SetAnimationClipSettings(clip, originalSettings);
+                        ClipSettingsRestoreGuard.Untrack(clip);
+                    }
                 }
             }
         }

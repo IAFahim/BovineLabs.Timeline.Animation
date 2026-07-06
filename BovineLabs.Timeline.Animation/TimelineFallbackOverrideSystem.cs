@@ -28,6 +28,11 @@ namespace BovineLabs.Timeline.Animation
             _targets = new NativeList<Entity>(64, Allocator.Persistent);
             _activeClips = SystemAPI.QueryBuilder()
                 .WithAll<ClipActive, TimelineActive, Clip, TrackBinding>().Build();
+
+            // A24: no FallbackBlend actor anywhere => nothing to latch or restore. This is the persistent actor
+            // component (not the transient override query): the RestoreFallbackJob still runs on the frame an override
+            // clip disappears (an actor keeps its FallbackBlend), so the reconcile-to-default path is preserved.
+            state.RequireForUpdate<FallbackBlend>();
         }
 
         [BurstCompile]

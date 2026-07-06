@@ -1,6 +1,10 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
+using System.Collections.Generic;
+using BovineLabs.Core.ObjectManagement;
 using BovineLabs.Testing;
+using BovineLabs.Timeline.Data;
 using NUnit.Framework;
+using Unity.Collections;
 using Unity.Core;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -12,7 +16,18 @@ namespace BovineLabs.Timeline.Animation.Tests
     {
         private const float DeltaTime = 1f / 60f;
 
+        private readonly List<NativeHashMap<ObjectId, Entity>> registryMaps = new();
+
         private double elapsed;
+
+        [TearDown]
+        public void DisposeMaps()
+        {
+            foreach (var map in registryMaps)
+                if (map.IsCreated)
+                    map.Dispose();
+            registryMaps.Clear();
+        }
 
         [Test]
         public void PersistentAttachmentDrivesPoseWithoutSamples()
@@ -91,6 +106,120 @@ namespace BovineLabs.Timeline.Animation.Tests
             Assert.AreEqual(0, Manager.GetComponentData<WeaponAttachEase>(weapon).Active,
                 "the ease must clear itself once the pose converges on the anchor");
             Assert.IsTrue(math.abs(Manager.GetComponentData<LocalTransform>(weapon).Position.x - 10f) < 1e-2f);
+        }
+
+        [Test]
+        public void EquipReusesInsteadOfAccumulating()
+        {
+            const int objectId = 42;
+            var prefab = CreatePrefab();
+            CreateRegistry(objectId, prefab);
+            var holder = Manager.CreateEntity();
+            var clip = CreateStateClip(WeaponStateMode.Equip, objectId, holder, Entity.Null);
+
+            // First activation spawns exactly one weapon and records it on the holder.
+            RunLifecycle();
+            Assert.AreEqual(1, WeaponCount(), "the first Equip activation must spawn exactly one weapon");
+            Assert.IsTrue(Manager.HasComponent<EquippedWeapon>(holder), "Equip must record the weapon on the holder");
+            var first = Manager.GetComponentData<EquippedWeapon>(holder).Weapon;
+            Assert.IsTrue(Manager.Exists(first));
+
+            // Re-arm the edge (clip deactivates then re-activates, as a looping timeline does).
+            Manager.SetComponentEnabled<ClipActive>(clip, false);
+            RunLifecycle();
+            Manager.SetComponentEnabled<ClipActive>(clip, true);
+            RunLifecycle();
+
+            Assert.AreEqual(1, WeaponCount(), "a second Equip of the same weapon must reuse the instance, not accumulate");
+            Assert.AreEqual(first, Manager.GetComponentData<EquippedWeapon>(holder).Weapon,
+                "the reused weapon must be the same instance");
+        }
+
+        [Test]
+        public void DropResolvesEquipSpawnedWeaponFromHolder()
+        {
+            const int objectId = 7;
+            var prefab = CreatePrefab();
+            CreateRegistry(objectId, prefab);
+            var holder = Manager.CreateEntity();
+
+            var equip = CreateStateClip(WeaponStateMode.Equip, objectId, holder, Entity.Null);
+            RunLifecycle();
+            var weapon = Manager.GetComponentData<EquippedWeapon>(holder).Weapon;
+
+            // A Drop clip with no bound weapon must fall back to the holder's equipped instance.
+            Manager.SetComponentEnabled<ClipActive>(equip, false);
+            CreateStateClip(WeaponStateMode.Drop, objectId, holder, Entity.Null);
+            RunLifecycle();
+
+            Assert.IsTrue(Manager.Exists(weapon), "a dropped weapon must survive as a free physics object");
+            Assert.IsFalse(Manager.IsComponentEnabled<WeaponAttachment>(weapon), "Drop must detach the resolved weapon");
+            Assert.IsFalse(Manager.HasComponent<EquippedWeaponOwner>(weapon),
+                "Drop must sever ownership so the reconcile pass never destroys the dropped weapon");
+            Assert.IsFalse(Manager.HasComponent<EquippedWeapon>(holder), "Drop must free the holder's equipped slot");
+        }
+
+        [Test]
+        public void OrphanedWeaponIsDestroyedWhenHolderDies()
+        {
+            const int objectId = 3;
+            var prefab = CreatePrefab();
+            CreateRegistry(objectId, prefab);
+            var holder = Manager.CreateEntity();
+
+            CreateStateClip(WeaponStateMode.Equip, objectId, holder, Entity.Null);
+            RunLifecycle();
+            var weapon = Manager.GetComponentData<EquippedWeapon>(holder).Weapon;
+            Assert.IsTrue(Manager.Exists(weapon));
+
+            // Holder death strips its normal EquippedWeapon; the reconcile pass must collect the orphaned weapon.
+            Manager.DestroyEntity(holder);
+            RunLifecycle();
+
+            Assert.IsFalse(Manager.Exists(weapon), "a weapon whose holder died must be destroyed by the reconcile pass");
+        }
+
+        private int WeaponCount()
+        {
+            using var query = Manager.CreateEntityQuery(ComponentType.ReadOnly<EquippedWeaponOwner>());
+            return query.CalculateEntityCount();
+        }
+
+        private Entity CreatePrefab()
+        {
+            var prefab = Manager.CreateEntity();
+            Manager.AddComponentData(prefab, LocalTransform.Identity);
+            return prefab;
+        }
+
+        private void CreateRegistry(int objectId, Entity prefab)
+        {
+            var map = new NativeHashMap<ObjectId, Entity>(1, Allocator.Persistent);
+            map.Add(new ObjectId(objectId), prefab);
+            registryMaps.Add(map);
+
+            var entity = Manager.CreateEntity();
+            Manager.AddComponentData(entity, new ObjectDefinitionRegistry(map));
+        }
+
+        private Entity CreateStateClip(WeaponStateMode mode, int objectId, Entity holder, Entity binding)
+        {
+            var clip = Manager.CreateEntity();
+            Manager.AddComponent<ClipActive>(clip);
+            Manager.AddComponent<TimelineActive>(clip);
+            Manager.AddComponentData(clip, new WeaponStateClipData { Mode = mode, ObjectId = objectId });
+            Manager.AddComponentData(clip, new TrackBinding { Value = binding });
+            Manager.AddComponentData(clip, new DirectorRoot { Director = holder });
+            Manager.AddComponent<WeaponStateFired>(clip);
+            Manager.SetComponentEnabled<WeaponStateFired>(clip, false);
+            return clip;
+        }
+
+        private void RunLifecycle()
+        {
+            var system = World.CreateSystem<WeaponLifecycleSystem>();
+            system.Update(WorldUnmanaged);
+            Manager.CompleteAllTrackedJobs();
         }
 
         private void Update()

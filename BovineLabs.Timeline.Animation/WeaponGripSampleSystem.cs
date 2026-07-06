@@ -29,13 +29,17 @@ namespace BovineLabs.Timeline.Animation
         private EntityQuery _boneQuery;
         private EntityQuery _clipQuery;
         private EntityQuery _attachmentQuery;
+        private int _lastBoneOrderVersion;
+        private bool _boneMapBuilt;
 
         // Not [BurstCompile]: RequireAnyForUpdate(a, b) allocates a managed EntityQuery[]
         // (params), which Burst rejects (BC1028). OnCreate runs once — no Burst benefit.
         public void OnCreate(ref SystemState state)
         {
             _bones = new NativeParallelHashMap<RigBoneKey, Entity>(256, Allocator.Persistent);
-            _warned = new NativeParallelHashSet<ulong>(16, Allocator.Persistent);
+            // Sized well above the realistic distinct-warn-key count: the set is written by a ParallelWriter, which
+            // cannot grow, so an under-sized capacity would drop or duplicate BL_DEBUG warnings.
+            _warned = new NativeParallelHashSet<ulong>(256, Allocator.Persistent);
 
             _boneQuery = SystemAPI.QueryBuilder().WithAll<AnimatorEntityRefComponent>().Build();
             _clipQuery = SystemAPI.QueryBuilder()
@@ -61,16 +65,26 @@ namespace BovineLabs.Timeline.Animation
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
-            var boneCount = _boneQuery.CalculateEntityCountWithoutFiltering();
-            if (_bones.Capacity < boneCount)
-                _bones.Capacity = math.max(_bones.Capacity * 2, boneCount);
-            _bones.Clear();
-
-            state.Dependency = new BuildBoneMapJob
+            // The rig-bone map only changes when bones are added/removed (rig spawn/despawn). Rebuild it only when the
+            // bone query's order version moves — otherwise reuse last build's map (over crowds this is the difference
+            // between O(total bones)/frame and near-zero). The downstream jobs read the persisted map either way.
+            var version = _boneQuery.GetCombinedComponentOrderVersion(false);
+            if (!_boneMapBuilt || version != _lastBoneOrderVersion)
             {
-                RigLookup = SystemAPI.GetComponentLookup<RigDefinitionComponent>(true),
-                Bones = _bones.AsParallelWriter()
-            }.ScheduleParallel(_boneQuery, state.Dependency);
+                _boneMapBuilt = true;
+                _lastBoneOrderVersion = version;
+
+                var boneCount = _boneQuery.CalculateEntityCountWithoutFiltering();
+                if (_bones.Capacity < boneCount)
+                    _bones.Capacity = math.max(_bones.Capacity * 2, boneCount);
+                _bones.Clear();
+
+                state.Dependency = new BuildBoneMapJob
+                {
+                    RigLookup = SystemAPI.GetComponentLookup<RigDefinitionComponent>(true),
+                    Bones = _bones.AsParallelWriter()
+                }.ScheduleParallel(_boneQuery, state.Dependency);
+            }
 
             var registry = SystemAPI.GetSingleton<WeaponGripRegistry>().Value;
 

@@ -23,13 +23,48 @@ namespace BovineLabs.Timeline.Animation.Authoring
         public ClipCaps clipCaps => ClipCaps.All;
 
 #if UNITY_EDITOR
+        // Back-reference stamped by BlendTreeDirectTrack.CreateTrackMixer so the edit-mode preview can reach the track's
+        // Motions (a clip's PlayableAsset otherwise has no clean handle on its owning track). Not serialized.
+        [System.NonSerialized] internal BlendTreeDirectTrack EditorPreviewTrack;
 
         public override Playable CreatePlayable(PlayableGraph graph, GameObject owner)
         {
-            // Documented gap: edit-mode scrub shows the bind pose, not a blended pose. The motions
-            // (AnimationClips + their weights) live on BlendTreeDirectTrack, not on this clip.
             if (!Application.isPlaying)
-                return AnimationMixerPlayable.Create(graph);
+            {
+                var motions = EditorPreviewTrack?.Motions;
+
+                // No track back-ref or no motions: fall back to the empty mixer (bind pose), exactly as before.
+                if (motions == null || motions.Count == 0)
+                    return AnimationMixerPlayable.Create(graph);
+
+                // Dominant-motion approximation, NOT the runtime weighted blend: Direct trees carry an explicit static
+                // weight per motion, so preview the single highest-weight motion. Trust runtime for the true blend.
+                AnimationClip dominant = null;
+                var bestWeight = float.NegativeInfinity;
+
+                foreach (var motion in motions)
+                {
+                    if (motion?.clip == null)
+                        continue;
+
+                    if (motion.weight > bestWeight)
+                    {
+                        bestWeight = motion.weight;
+                        dominant = motion.clip;
+                    }
+                }
+
+                if (dominant == null)
+                    return AnimationMixerPlayable.Create(graph);
+
+                var asset = CreateInstance<AnimationPlayableAsset>();
+                asset.clip = dominant;
+                asset.applyFootIK = applyFootIK;
+                asset.removeStartOffset = removeStartOffset;
+                asset.position = positionOffset;
+                asset.rotation = Quaternion.Euler(eulerAnglesOffset);
+                return asset.CreatePlayable(graph, owner);
+            }
 
             return base.CreatePlayable(graph, owner);
         }

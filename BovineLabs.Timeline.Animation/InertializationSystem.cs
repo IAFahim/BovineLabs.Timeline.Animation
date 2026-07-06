@@ -67,10 +67,6 @@ namespace BovineLabs.Timeline.Animation
 
             public float deltaTime;
 
-            // Normalized-time discontinuity (fraction of a clip cycle) above which a same-clip phase jump is treated
-            // as a raw loop seam worth inertializing. A clean full-cycle wrap lands ~0 and stays well under this.
-            private const float PhaseJumpThreshold = 0.05f;
-
             private void Execute(
                 Entity e,
                 in RigDefinitionComponent rigDef,
@@ -111,7 +107,7 @@ namespace BovineLabs.Timeline.Animation
                     inert.active = 0;
                     inert.elapsed = 0f;
                     inert.initialized = 1;
-                    inert.lastDominant = ComputeDominant(atps, out _, out var seedTime);
+                    inert.lastDominant = ComputeDominant(atps, out _, out var seedTime, out _, out _);
                     inert.lastDominantTime = seedTime;
                     inert.prevDominantTime = seedTime;
                     return;
@@ -119,22 +115,36 @@ namespace BovineLabs.Timeline.Animation
 
                 var dt = deltaTime;
 
-                // 1. Dominant = motionId (and normalized time) of the highest-weight entry this frame.
-                var dominant = ComputeDominant(atps, out var hasDominant, out var dominantTime);
+                // 1. Candidate dominant = highest-weight entry this frame (with its normalized time + clip length).
+                var candidate = ComputeDominant(atps, out var hasDominant, out var dominantTime, out var dominantLen, out var candidateWeight);
+
+                // 1b. Dominance hysteresis: two clips crossing at ~equal weight would otherwise flip the dominant back
+                //     and forth across frames and re-capture on every flip. Only let a NEW candidate take over when it
+                //     beats the currently-latched dominant by DominanceWeightMargin, or the old dominant no longer
+                //     contributes at all. Otherwise keep tracking the old dominant (using ITS phase this frame).
+                if (hasDominant && candidate != inert.lastDominant &&
+                    TryFindMotion(atps, inert.lastDominant, out var oldWeight, out var oldTime, out var oldLen) &&
+                    candidateWeight <= oldWeight + InertializationMath.DominanceWeightMargin)
+                {
+                    candidate = inert.lastDominant;
+                    dominantTime = oldTime;
+                    dominantLen = oldLen;
+                }
+
+                var dominant = candidate;
 
                 // 2. Transition? Two triggers: (a) the dominant clip changed, or (b) the SAME clip's phase jumped
                 //    discontinuously (a raw loop seam for a clip not using continuous-loop mode). The phase-jump test
-                //    predicts this frame's phase from last frame's phase + the previous per-frame step, and fires only
-                //    when the actual phase deviates by more than PhaseJumpThreshold — so a clean full-cycle wrap (which
-                //    lands ~exactly on the prediction) does NOT fire.
+                //    (see InertializationMath.IsPhaseJump) measures the deviation in SECONDS against a step-scaled
+                //    tolerance, so a clean full-cycle wrap does NOT fire and frame-time jitter on short clips does not
+                //    false-positive.
                 //    dt > 0 guard avoids a divide-by-zero velocity on the very first stepped frame / paused frames.
                 bool clipChanged = hasDominant && dominant != inert.lastDominant;
                 bool phaseJump = false;
                 if (hasDominant && dominant == inert.lastDominant && dt > 0f)
                 {
-                    float expectedStep = WrapHalf(inert.lastDominantTime - inert.prevDominantTime);
-                    float discontinuity = WrapHalf(dominantTime - math.frac(inert.lastDominantTime + expectedStep));
-                    phaseJump = math.abs(discontinuity) > PhaseJumpThreshold;
+                    phaseJump = InertializationMath.IsPhaseJump(
+                        dominantTime, inert.lastDominantTime, inert.prevDominantTime, dominantLen);
                 }
 
                 if ((clipChanged || phaseJump) && inert.duration > 0f && dt > 0f)
@@ -151,13 +161,13 @@ namespace BovineLabs.Timeline.Animation
 
                         // Rotation channel: offset rotation reduced to a scalar angle about a fixed axis.
                         var qOffset = math.mul(bs.prevDisplayed.rot, math.inverse(target.rot));
-                        ToAngleAxis(qOffset, out var axis, out var angle);
+                        InertializationMath.ToAngleAxis(qOffset, out var axis, out var angle);
                         bs.rotAxis = axis;
                         bs.rotAngle0 = angle;
 
                         // Offset-velocity = incoming displayed angular velocity projected onto the offset axis.
                         var qDelta = math.mul(bs.prevDisplayed.rot, math.inverse(bs.prevPrevDisplayed.rot));
-                        ToAngleAxis(qDelta, out var dAxis, out var dAngle);
+                        InertializationMath.ToAngleAxis(qDelta, out var dAxis, out var dAngle);
                         bs.rotVel0 = math.dot(dAxis * (dAngle * invDt), axis);
 
                         // Acceleration (a0) from a second difference of the displayed history. Position is the direct
@@ -166,8 +176,8 @@ namespace BovineLabs.Timeline.Animation
                         bs.posAcc0 = (bs.prevDisplayed.pos - 2f * bs.prevPrevDisplayed.pos + bs.prevPrevPrevDisplayed.pos) * invDt2;
                         var qd1 = math.mul(bs.prevDisplayed.rot, math.inverse(bs.prevPrevDisplayed.rot));
                         var qd0 = math.mul(bs.prevPrevDisplayed.rot, math.inverse(bs.prevPrevPrevDisplayed.rot));
-                        ToAngleAxis(qd1, out var a1ax, out var a1);
-                        ToAngleAxis(qd0, out var a0ax, out var a0a);
+                        InertializationMath.ToAngleAxis(qd1, out var a1ax, out var a1);
+                        InertializationMath.ToAngleAxis(qd0, out var a0ax, out var a0a);
                         var w1 = math.dot(a1ax * a1, axis) * invDt;
                         var w0 = math.dot(a0ax * a0a, axis) * invDt;
                         bs.rotAcc0 = (w1 - w0) * invDt;
@@ -210,11 +220,11 @@ namespace BovineLabs.Timeline.Animation
                     if (applying)
                     {
                         var posOff = new float3(
-                            Quintic(bs.posOffset0.x, bs.posVel0.x, bs.posAcc0.x, t, duration),
-                            Quintic(bs.posOffset0.y, bs.posVel0.y, bs.posAcc0.y, t, duration),
-                            Quintic(bs.posOffset0.z, bs.posVel0.z, bs.posAcc0.z, t, duration));
+                            InertializationMath.Quintic(bs.posOffset0.x, bs.posVel0.x, bs.posAcc0.x, t, duration),
+                            InertializationMath.Quintic(bs.posOffset0.y, bs.posVel0.y, bs.posAcc0.y, t, duration),
+                            InertializationMath.Quintic(bs.posOffset0.z, bs.posVel0.z, bs.posAcc0.z, t, duration));
 
-                        var rotOff = Quintic(bs.rotAngle0, bs.rotVel0, bs.rotAcc0, t, duration);
+                        var rotOff = InertializationMath.Quintic(bs.rotAngle0, bs.rotVel0, bs.rotAcc0, t, duration);
 
                         displayed.pos = target.pos + posOff;
                         displayed.rot = math.mul(quaternion.AxisAngle(bs.rotAxis, rotOff), target.rot);
@@ -242,14 +252,17 @@ namespace BovineLabs.Timeline.Animation
                 }
             }
 
-            // motionId (and normalized time) of the highest-weight AnimationToProcessComponent entry; hasDominant=false
-            // if none contribute.
+            // motionId (plus normalized time, clip length and weight) of the highest-weight AnimationToProcessComponent
+            // entry; hasDominant=false if none contribute.
             private static uint ComputeDominant(
-                in DynamicBuffer<AnimationToProcessComponent> atps, out bool hasDominant, out float dominantTime)
+                in DynamicBuffer<AnimationToProcessComponent> atps, out bool hasDominant, out float dominantTime,
+                out float dominantLen, out float dominantWeight)
             {
                 hasDominant = false;
                 uint dominant = 0;
                 dominantTime = 0f;
+                dominantLen = 0f;
+                dominantWeight = 0f;
                 var best = 0f;
                 for (var i = 0; i < atps.Length; i++)
                 {
@@ -259,6 +272,8 @@ namespace BovineLabs.Timeline.Animation
                         best = w;
                         dominant = atps[i].motionId;
                         dominantTime = atps[i].time;
+                        dominantLen = atps[i].animation.IsCreated ? atps[i].animation.Value.length : 0f;
+                        dominantWeight = w;
                         hasDominant = true;
                     }
                 }
@@ -266,60 +281,32 @@ namespace BovineLabs.Timeline.Animation
                 return dominant;
             }
 
-            // Wraps a normalized-time delta into [-0.5, 0.5] so a clip's phase difference is measured the short way
-            // around the loop (a +0.98 step and a -0.02 step read the same). Used only by the phase-jump detector.
-            private static float WrapHalf(float x) => x - math.round(x);
-
-            // Full Bollo quintic closed-form for one scalar channel. x(0)=x0, x'(0)=v0, x''(0)=a0; x(T)=x'(T)=x''(T)=0.
-            // Per-channel overshoot guard shortens the effective window when the offset is already closing on zero.
-            private static float Quintic(float x0, float v0, float a0, float t, float duration)
+            // Weight/time/clip-length this frame of a specific motionId (the previously-latched dominant), for the
+            // dominance-hysteresis compare. false if that motion no longer contributes.
+            private static bool TryFindMotion(
+                in DynamicBuffer<AnimationToProcessComponent> atps, uint motionId, out float weight, out float time,
+                out float len)
             {
-                var teff = duration;
-                if (math.abs(v0) > 1e-9f)
+                weight = 0f;
+                time = 0f;
+                len = 0f;
+                if (motionId == 0)
                 {
-                    var guard = -5f * x0 / v0;
-                    if (guard > 0f && guard < teff)
+                    return false;
+                }
+
+                for (var i = 0; i < atps.Length; i++)
+                {
+                    if (atps[i].motionId == motionId)
                     {
-                        teff = guard;
+                        weight = atps[i].weight;
+                        time = atps[i].time;
+                        len = atps[i].animation.IsCreated ? atps[i].animation.Value.length : 0f;
+                        return true;
                     }
                 }
 
-                if (teff <= 1e-9f || t >= teff)
-                {
-                    return 0f;
-                }
-
-                var t2 = teff * teff;
-                var t3 = t2 * teff;
-                var t4 = t3 * teff;
-                var t5 = t4 * teff;
-
-                var A = -(a0 * t2 + 6f * v0 * teff + 12f * x0) / (2f * t5);
-                var B = (3f * a0 * t2 + 16f * v0 * teff + 30f * x0) / (2f * t4);
-                var C = -(3f * a0 * t2 + 12f * v0 * teff + 20f * x0) / (2f * t3);
-
-                var p2 = t * t;
-                var p3 = p2 * t;
-                var p4 = p3 * t;
-                var p5 = p4 * t;
-
-                return (A * p5) + (B * p4) + (C * p3) + (a0 * 0.5f * p2) + (v0 * t) + x0;
-            }
-
-            // Quaternion -> shortest-arc angle (>= 0) about a unit axis. Mirrors Unity's ToAngleAxis semantics.
-            private static void ToAngleAxis(quaternion q, out float3 axis, out float angle)
-            {
-                var v = math.normalize(q).value;
-                if (v.w < 0f)
-                {
-                    v = -v; // shortest arc
-                }
-
-                var w = math.clamp(v.w, -1f, 1f);
-                angle = 2f * math.acos(w);
-
-                var s = math.sqrt(math.max(0f, 1f - (w * w)));
-                axis = s < 1e-6f ? new float3(0f, 1f, 0f) : v.xyz / s;
+                return false;
             }
         }
     }

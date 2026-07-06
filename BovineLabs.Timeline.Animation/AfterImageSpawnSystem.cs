@@ -52,7 +52,15 @@ namespace BovineLabs.Timeline.Animation
                          .WithAll<ClipActive>()
                          .WithEntityAccess())
             {
-                if (clipData.ValueRO.SpawnedEntity != Entity.Null) continue;
+                var spawned = clipData.ValueRO.SpawnedEntity;
+                if (spawned != Entity.Null)
+                {
+                    // Ghost still alive: nothing to do. Ghost destroyed externally (prefab lifetime, scene unload,
+                    // gameplay cleanup): clear the stale pointer so the clip is honest — it may respawn while the clip
+                    // is still active, matching the "ghost per activation" intent.
+                    if (state.EntityManager.Exists(spawned)) continue;
+                    ecb.SetComponent(entity, new AfterImageClipData { SpawnedEntity = Entity.Null });
+                }
 
                 var trackEntity = clip.ValueRO.Track;
                 if (!SystemAPI.HasComponent<AfterImageTrackData>(trackEntity)) continue;

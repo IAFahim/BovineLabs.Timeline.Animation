@@ -48,9 +48,17 @@ namespace BovineLabs.Timeline.Animation.Authoring
                     continue;
                 }
 
+                // A zero ID is an unassigned auto-id: it keys nothing in the registry and would collide in the blob
+                // hash map (AddUnique) with any other zero-ID weapon. Skip it and tell the designer to assign one.
+                if (preset.weapon.ID == 0)
+                {
+                    Debug.LogWarning($"{nameof(WeaponGripSettings)}: preset '{preset.name}' weapon '{preset.weapon.name}' has ID 0 (unassigned ObjectDefinition id); skipped. Assign the weapon an ObjectDefinition id.", preset);
+                    continue;
+                }
+
                 if (!seen.Add(preset.weapon))
                 {
-                    Debug.LogWarning($"{nameof(WeaponGripSettings)}: multiple presets for weapon '{preset.weapon.name}'; '{preset.name}' skipped.", preset);
+                    Debug.LogWarning($"{nameof(WeaponGripSettings)}: multiple presets share weapon ObjectDefinition id {preset.weapon.ID} ('{preset.weapon.name}'); '{preset.name}' skipped. Two ObjectDefinitions with the same id is the duplicate-id trap.", preset);
                     continue;
                 }
 

@@ -54,7 +54,9 @@ namespace BovineLabs.Timeline.Animation
 
     /// <summary>
     /// World-space velocity of the blended anchor pose, tracked by WeaponAnchorBlendSystem from the last two frames.
-    /// Drop copies it into PhysicsVelocity so a released weapon flies believably.
+    /// Drop copies it into PhysicsVelocity so a released weapon flies believably. The tracked value is an exponential
+    /// moving average of the per-frame finite difference (seeded exact on the first sample) so a single hitch frame
+    /// cannot produce an absurd drop velocity.
     /// </summary>
     public struct WeaponPoseVelocity : IComponentData
     {
@@ -64,6 +66,32 @@ namespace BovineLabs.Timeline.Animation
         public float3 PrevPosition;
         public quaternion PrevRotation;
         public byte HasPrev;
+
+        /// <summary> 0 until the first velocity sample seeds the EMA exactly; 1 thereafter (smoothing engaged). </summary>
+        public byte HasVelocity;
+    }
+
+    /// <summary>
+    /// Recorded on a weapon holder (the timeline DirectorRoot director) by <see cref="WeaponStateMode.Equip" />:
+    /// which weapon instance it currently has equipped and the ObjectDefinition id it was spawned from. Equip re-attaches
+    /// this instance instead of spawning a duplicate when the ids match (no accumulation on looping timelines);
+    /// Drop/ReAttach/Pickup fall back to it when the track has no bound weapon.
+    /// </summary>
+    public struct EquippedWeapon : IComponentData
+    {
+        public Entity Weapon;
+        public int ObjectId;
+    }
+
+    /// <summary>
+    /// Cleanup back-reference on an Equip-spawned weapon pointing at its holder — mirrors AfterImageGhostOwner. The
+    /// reconcile pass in WeaponLifecycleSystem destroys the weapon when the holder dies (the holder's normal
+    /// <see cref="EquippedWeapon" /> is auto-stripped, so the back-reference no longer matches) or when the holder
+    /// re-equips a different weapon. Drop severs this link so a dropped weapon becomes a free physics object.
+    /// </summary>
+    public struct EquippedWeaponOwner : ICleanupComponentData
+    {
+        public Entity Holder;
     }
 
     /// <summary>

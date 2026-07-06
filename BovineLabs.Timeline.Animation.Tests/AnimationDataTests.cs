@@ -38,6 +38,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             Assert.AreEqual(default(quaternion), d.RotationOffset);
             Assert.IsFalse(d.RemoveStartOffset);
             Assert.IsFalse(d.ApplyFootIK);
+            Assert.AreEqual(0f, d.TimeScale);
         }
 
         [Test]
@@ -59,7 +60,8 @@ namespace BovineLabs.Timeline.Animation.Tests
                 PositionOffset = posOff,
                 RotationOffset = rotOff,
                 RemoveStartOffset = true,
-                ApplyFootIK = true
+                ApplyFootIK = true,
+                TimeScale = 2.0f
             };
             Assert.AreEqual(3, d.LayerIndex);
             Assert.AreEqual(hash, d.ClipHash);
@@ -72,6 +74,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             Assert.AreEqual(rotOff, d.RotationOffset);
             Assert.IsTrue(d.RemoveStartOffset);
             Assert.IsTrue(d.ApplyFootIK);
+            Assert.AreEqual(2.0f, d.TimeScale);
         }
     }
 
@@ -161,9 +164,9 @@ namespace BovineLabs.Timeline.Animation.Tests
         }
 
         [Test]
-        public void Implements_IEnableableComponent()
+        public void DoesNotImplement_IEnableableComponent()
         {
-            Assert.IsTrue(typeof(IEnableableComponent).IsAssignableFrom(typeof(BlendGroupTimer)));
+            Assert.IsFalse(typeof(IEnableableComponent).IsAssignableFrom(typeof(BlendGroupTimer)));
         }
 
         [Test]
@@ -172,6 +175,7 @@ namespace BovineLabs.Timeline.Animation.Tests
             var d = new BlendGroupTimer();
             Assert.AreEqual(0f, d.FallbackAccumulatedTime);
             Assert.AreEqual(default(Hash128), d.PreviousFallbackClipHash);
+            Assert.AreEqual(0f, d.TimeScale);
         }
 
         [Test]
@@ -181,10 +185,12 @@ namespace BovineLabs.Timeline.Animation.Tests
             var d = new BlendGroupTimer
             {
                 FallbackAccumulatedTime = 1.23f,
-                PreviousFallbackClipHash = hash
+                PreviousFallbackClipHash = hash,
+                TimeScale = 0.5f
             };
             Assert.AreEqual(1.23f, d.FallbackAccumulatedTime);
             Assert.AreEqual(hash, d.PreviousFallbackClipHash);
+            Assert.AreEqual(0.5f, d.TimeScale);
         }
     }
 

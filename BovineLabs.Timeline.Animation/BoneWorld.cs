@@ -41,6 +41,11 @@ namespace BovineLabs.Timeline.Animation
                 matrix = math.mul(parentMatrix, matrix);
             }
 
+            // Depth exhausted while a parent link still exists: the matrix is only relative to the ancestor we
+            // reached, not the world root — return failure rather than a wrong-but-plausible partial pose.
+            if (parentLookup.HasComponent(current))
+                return false;
+
             worldMatrix = matrix;
             return true;
         }

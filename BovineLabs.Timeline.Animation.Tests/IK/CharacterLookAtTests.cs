@@ -320,6 +320,53 @@ namespace BovineLabs.Timeline.Animation.Tests
             World.DestroySystem(system);
         }
 
+        [Test]
+        public void TwoOverlappingClips_BlendAngleLimits_NotSlotOneOnly()
+        {
+            var system = World.CreateSystem<CharacterLookAtTrackSystem>();
+
+            var target = Manager.CreateEntity(typeof(LocalTransform));
+            Manager.SetComponentData(target, LocalTransform.Identity);
+
+            var aim = Manager.CreateEntity(typeof(AimIKComponent), typeof(LocalToWorld));
+            Manager.SetComponentData(aim, new AimIKComponent { weight = 0f });
+
+            var animator = Manager.CreateEntity(typeof(CharacterLookAtTarget), typeof(LocalToWorld));
+            Manager.SetComponentData(animator, new CharacterLookAtTarget { TargetEntity = target, AimIKEntity = aim });
+            Manager.SetComponentData(animator, new LocalToWorld { Value = float4x4.identity });
+
+            var lookPoint = new float3(3f, 0f, 0f);
+
+            var clipA = CreateActiveClip(animator, new CharacterLookAtData
+            {
+                Weight = 1f,
+                AngleLimits = new float2(-80f, 80f),
+                SourceMode = PointSourceMode.StaticWorld,
+                StaticOrOffsetPoint = lookPoint
+            });
+            Manager.AddComponentData(clipA, new ClipWeight { Value = 0.5f });
+
+            var clipB = CreateActiveClip(animator, new CharacterLookAtData
+            {
+                Weight = 1f,
+                AngleLimits = new float2(-10f, 10f),
+                SourceMode = PointSourceMode.StaticWorld,
+                StaticOrOffsetPoint = lookPoint
+            });
+            Manager.AddComponentData(clipB, new ClipWeight { Value = 0.5f });
+
+            system.Update(WorldUnmanaged);
+            Manager.CompleteAllTrackedJobs();
+
+            // 50/50 blend of (-80,80) and (-10,10) => (-45,45). If the write used slot 1's raw limits instead of the
+            // blended value, this would read one clip's limits (-80/-10 or 80/10), not the midpoint.
+            var writtenAim = Manager.GetComponentData<AimIKComponent>(aim);
+            Assert.AreEqual(-45f, writtenAim.angleLimits.x, 0.0001f);
+            Assert.AreEqual(45f, writtenAim.angleLimits.y, 0.0001f);
+
+            World.DestroySystem(system);
+        }
+
         private Entity CreateActiveClip(Entity animator, CharacterLookAtData authored)
         {
             var clip = Manager.CreateEntity(

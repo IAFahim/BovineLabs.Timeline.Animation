@@ -18,6 +18,7 @@
     "Unity.Entities",
     "Unity.Mathematics",
     "Unity.Transforms",
+    "Unity.Physics",
     "Unity.Timeline",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"

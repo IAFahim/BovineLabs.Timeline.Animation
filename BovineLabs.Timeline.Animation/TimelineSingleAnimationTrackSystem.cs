@@ -1,3 +1,4 @@
+using BovineLabs.Core;
 using BovineLabs.Core.Extensions;
 using BovineLabs.Core.Iterators;
 using BovineLabs.Timeline.Data;
@@ -64,6 +65,8 @@ namespace BovineLabs.Timeline.Animation
                 AnimDB = blobDB.animations,
                 ClipWeights = _clipWeights,
                 TrackDataLookup = _trackData,
+                CullLookup = SystemAPI.GetComponentLookup<CullAnimationsTag>(true),
+                Logger = SystemAPI.GetSingleton<BLLogger>(),
                 ActiveAnimations = _activeAnimationsMap.AsParallelWriter()
             };
 
@@ -90,6 +93,9 @@ namespace BovineLabs.Timeline.Animation
             [ReadOnly] public NativeHashMap<Hash128, BlobAssetReference<AnimationClipBlob>> AnimDB;
             [ReadOnly] public UnsafeComponentLookup<ClipWeight> ClipWeights;
             [ReadOnly] public UnsafeComponentLookup<RukhankaSingleTrackData> TrackDataLookup;
+            [ReadOnly] public ComponentLookup<CullAnimationsTag> CullLookup;
+
+            public BLLogger Logger;
 
             public NativeParallelMultiHashMap<Entity, BlendGroupEntry>.ParallelWriter ActiveAnimations;
 
@@ -98,12 +104,21 @@ namespace BovineLabs.Timeline.Animation
             {
                 if (!TrackDataLookup.TryGetComponent(clip.Track, out var trackData)) return;
 
+                // Off-screen rig: Rukhanka skips its pose computation, so gathering timeline clips for it is wasted
+                // work (and the unification system freezes its blend state anyway). Skip.
+                if (CullLookup.HasComponent(binding.Value) && CullLookup.IsComponentEnabled(binding.Value)) return;
+
                 var weight = 1f;
                 if (ClipWeights.TryGetComponent(clipEntity, out var clipWeight))
                     weight = clipWeight.Value;
 
                 if (weight <= 0f) return;
-                if (!AnimDB.TryGetValue(clipData.ClipHash, out var clipBlob) || !clipBlob.IsCreated) return;
+                if (!AnimDB.TryGetValue(clipData.ClipHash, out var clipBlob) || !clipBlob.IsCreated)
+                {
+                    Logger.LogWarning512("[SingleClip] Animation hash not found in BlobDatabaseSingleton — clip skipped. " +
+                                         "Re-bake the SubScene or check the track's rig binding.");
+                    return;
+                }
 
                 var timeInSeconds = (float)(double)localTime.Value;
                 var duration = math.max(MinDuration, clipBlob.Value.length);
@@ -129,6 +144,10 @@ namespace BovineLabs.Timeline.Animation
                     RotationOffset = finalRotOffset,
                     RemoveStartOffset = clipData.RemoveStartOffset,
                     ApplyFootIK = clipData.ApplyFootIK,
+
+                    // Per-timeline playback speed of this clip; the unification system uses the dominant clip's
+                    // TimeScale to slow the fallback clock and crossfade ramps under per-timeline time-scale.
+                    TimeScale = (float)timeTransform.Scale,
 
                     // Continuous-phase loop mode. PhaseVelocity is cycles/sec = the clip's timeline speed
                     // multiplier (TimeTransform.Scale) divided by the clip length in seconds (duration). The

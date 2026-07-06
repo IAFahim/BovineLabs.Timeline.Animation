@@ -1,5 +1,27 @@
 # TODO.md
 
+## Campaign Status
+
+**32 / 35 fully IMPLEMENTED · 3 DEFERRED (SPIKE, partials landed).**
+
+The audit-implementation campaign is complete. All 35 items were addressed; 32 are fully
+implemented and verified in code. Three are deferred spikes where only the cheap/safe part
+was implemented and the larger port is intentionally left for a dedicated effort:
+
+- **#3 — GPU `AnimationToProcess` parity.** The runtime/bake-time *guard* (warn when a rig
+  carries timeline-animation components + `GPUAnimationEngineTag`) is implemented; the full
+  HLSL/GPU-struct field port is DEFERRED (SPIKE).
+- **#12 — Single-clip missing-hash + Animation Doctor.** The missing-hash warning parity in
+  the single-clip gather is implemented; the editor "Animation Doctor" diagnosis window is
+  DEFERRED (SPIKE).
+- **#27 — Offsets-contract fork-shrink.** Never assigned; spike-first. DEFERRED (SPIKE).
+
+Build/verify state: **all 6 assemblies compile green** (Data, runtime, Debug, Authoring,
+Editor, Tests). EditMode tests are **compile-verified but not run** (no headless Unity runner
+in this environment). Per-item status is in the *Final Ranked TODO List* table at the bottom.
+
+---
+
 Full-library production audit of `BovineLabs.Timeline.Animation` (Authoring / Data / Runtime / Debug / Editor / Tests) **plus** the load-bearing parts of the `com.rukhanka.animation` fork it depends on (the "BOVINELABS PARITY" fields on `AnimationToProcessComponent` and the "BOVINELABS TIMELINE OFFSET PATCH" in `AnimationProcessSystem_Jobs.cs`).
 
 All file references verified against the current working tree.
@@ -787,40 +809,40 @@ internal static class BlendTreeGatherCore
 
 ## Final Ranked TODO List
 
-| # | TODO | Priority | Certainty |
+| # | TODO | Priority | Status |
 |---|---|---|---|
-| 1 | Re-enable ragdoll activation pose snap (`if (false && …)`) | Critical | Confirmed |
-| 2 | Offsets/removeStartOffset only work with root motion — validate + decide contract | Critical | Confirmed |
-| 3 | GPU engine ignores parity fields — guard now, port later | Critical | Confirmed |
-| 4 | Inertialization phase-jump false positives under dt jitter + dominance hysteresis | High | Strongly Likely |
-| 5 | Weapon Equip accumulation + Drop can't target spawned weapon | High | Confirmed |
-| 6 | Inertialization + unification reconcile test coverage | High | Confirmed |
-| 7 | Ragdoll JointJob checks only `pair.EntityA` | High | Risk |
-| 8 | Deduplicate the three blend-tree systems (~1.3 k lines) | High | Confirmed |
-| 9 | Blend-tree phase clock has no reverse-playback support | High | Confirmed |
-| 10 | Fallback clock + weight ramps ignore timeline/world time scale | High | Confirmed |
-| 11 | WeaponAnchorBlendSystem LocalTransform aliasing — split compute/apply | High | Risk |
-| 12 | Single-clip gather drops missing blob hashes silently (parity with blend trees) + Animation Doctor | Medium | Confirmed |
-| 13 | Validator coverage for 1D/Direct/LayerWeight/WeaponGrip/AfterImage/LookAt/empty-motions/negative layers | Medium | Confirmed |
-| 14 | ExitIdleClip tooltip vs restore-on-inactive behavior mismatch | Medium | Confirmed |
-| 15 | Early-out timeline animation work for culled rigs | Medium | Confirmed |
-| 16 | Bake-time AnimationClipSettings mutation is crash-fragile — bake from a copy | Medium | Strongly Likely |
-| 17 | AfterImage ghost destroyed externally leaves clip spent | Medium | Confirmed |
-| 18 | LookAt: blended angle limits discarded; parent-matrix one-frame lag | Medium | Confirmed |
-| 19 | Dead state: `BlendGroupTimer.BaseLayerControl` + unused enableable | Medium | Confirmed |
-| 20 | `_missingRigWarned` global latch hides subsequent misconfigs (+ `_warned` capacity) | Medium | Confirmed |
-| 21 | WeaponGrip bone map rebuilt every frame — change-detect | Medium | Confirmed |
-| 22 | RagdollGenerator hardcoded categories/masses → settings asset | Medium | Confirmed |
-| 23 | `BoneWorld` MaxDepth silent partial result | Medium | Confirmed |
-| 24 | RequireForUpdate/early-outs on always-running systems | Medium | Confirmed |
-| 25 | WeaponGripSettings zero-ID + duplicate-ID clarity | Medium | Medium |
-| 26 | Editor preview parity matrix (+ optionally Inertialization in preview) | Medium | Confirmed |
-| 27 | Offsets contract home: shrink the Rukhanka fork patch | Medium | Medium |
-| 28 | Consolidate the six design/review docs | Medium | Confirmed |
-| 29 | Ragdoll one-fixed-step activation skew — document or unify through ECB | Low | Confirmed |
-| 30 | WeaponPoseVelocity single-frame differentiation — smooth for drop | Low | Confirmed |
-| 31 | Crossfade `clipLen * 0.5` floor — document | Low | Confirmed |
-| 32 | WeaponGripTrack GameObject-binding affordance | Low | Confirmed |
-| 33 | BlendTree1D/Direct edit-mode preview parity with 2D | Low | Confirmed |
-| 34 | LayerSumCapacity contract + `MotionId.ComputeForMotion` helper | Low | Confirmed |
-| 35 | Small cleanups batch (naming, epsilons, Min attrs, DurationToSpeed unification, debug-state stripping) | Low | Confirmed |
+| 1 | Re-enable ragdoll activation pose snap (`if (false && …)`) | Critical | ✅ IMPLEMENTED |
+| 2 | Offsets/removeStartOffset only work with root motion — validate + decide contract | Critical | ✅ IMPLEMENTED |
+| 3 | GPU engine ignores parity fields — guard now, port later | Critical | 🔲 DEFERRED (SPIKE) — guard done, HLSL port deferred |
+| 4 | Inertialization phase-jump false positives under dt jitter + dominance hysteresis | High | ✅ IMPLEMENTED |
+| 5 | Weapon Equip accumulation + Drop can't target spawned weapon | High | ✅ IMPLEMENTED |
+| 6 | Inertialization + unification reconcile test coverage | High | ✅ IMPLEMENTED |
+| 7 | Ragdoll JointJob checks only `pair.EntityA` | High | ✅ IMPLEMENTED |
+| 8 | Deduplicate the three blend-tree systems (~1.3 k lines) | High | ✅ IMPLEMENTED (`BlendTreeGatherCore`) |
+| 9 | Blend-tree phase clock has no reverse-playback support | High | ✅ IMPLEMENTED |
+| 10 | Fallback clock + weight ramps ignore timeline/world time scale | High | ✅ IMPLEMENTED |
+| 11 | WeaponAnchorBlendSystem LocalTransform aliasing — split compute/apply | High | ✅ IMPLEMENTED |
+| 12 | Single-clip gather drops missing blob hashes silently (parity with blend trees) + Animation Doctor | Medium | 🔲 DEFERRED (SPIKE) — missing-hash parity done, Doctor window deferred |
+| 13 | Validator coverage for 1D/Direct/LayerWeight/WeaponGrip/AfterImage/LookAt/empty-motions/negative layers | Medium | ✅ IMPLEMENTED |
+| 14 | ExitIdleClip tooltip vs restore-on-inactive behavior mismatch | Medium | ✅ IMPLEMENTED |
+| 15 | Early-out timeline animation work for culled rigs | Medium | ✅ IMPLEMENTED |
+| 16 | Bake-time AnimationClipSettings mutation is crash-fragile — bake from a copy | Medium | ✅ IMPLEMENTED |
+| 17 | AfterImage ghost destroyed externally leaves clip spent | Medium | ✅ IMPLEMENTED |
+| 18 | LookAt: blended angle limits discarded; parent-matrix one-frame lag | Medium | ✅ IMPLEMENTED |
+| 19 | Dead state: `BlendGroupTimer.BaseLayerControl` + unused enableable | Medium | ✅ IMPLEMENTED |
+| 20 | `_missingRigWarned` global latch hides subsequent misconfigs (+ `_warned` capacity) | Medium | ✅ IMPLEMENTED |
+| 21 | WeaponGrip bone map rebuilt every frame — change-detect | Medium | ✅ IMPLEMENTED |
+| 22 | RagdollGenerator hardcoded categories/masses → settings asset | Medium | ✅ IMPLEMENTED (`RagdollGeneratorSettings`) |
+| 23 | `BoneWorld` MaxDepth silent partial result | Medium | ✅ IMPLEMENTED |
+| 24 | RequireForUpdate/early-outs on always-running systems | Medium | ✅ IMPLEMENTED (this pass) |
+| 25 | WeaponGripSettings zero-ID + duplicate-ID clarity | Medium | ✅ IMPLEMENTED |
+| 26 | Editor preview parity matrix (+ optionally Inertialization in preview) | Medium | ✅ IMPLEMENTED |
+| 27 | Offsets contract home: shrink the Rukhanka fork patch | Medium | 🔲 DEFERRED (SPIKE) — never assigned, spike-first |
+| 28 | Consolidate the six design/review docs | Medium | ✅ IMPLEMENTED (this pass — `Documentation~/Architecture.md`) |
+| 29 | Ragdoll one-fixed-step activation skew — document or unify through ECB | Low | ✅ IMPLEMENTED (documented) |
+| 30 | WeaponPoseVelocity single-frame differentiation — smooth for drop | Low | ✅ IMPLEMENTED |
+| 31 | Crossfade `clipLen * 0.5` floor — document | Low | ✅ IMPLEMENTED (documented) |
+| 32 | WeaponGripTrack GameObject-binding affordance | Low | ✅ IMPLEMENTED (`WeaponGripTrackEditor`) |
+| 33 | BlendTree1D/Direct edit-mode preview parity with 2D | Low | ✅ IMPLEMENTED |
+| 34 | LayerSumCapacity contract + `MotionId.ComputeForMotion` helper | Low | ✅ IMPLEMENTED |
+| 35 | Small cleanups batch (naming, epsilons, Min attrs, DurationToSpeed unification, debug-state stripping) | Low | ✅ IMPLEMENTED (this pass) |

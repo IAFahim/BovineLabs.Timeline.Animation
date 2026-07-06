@@ -1,4 +1,3 @@
-using System.Linq;
 using Rukhanka;
 using Rukhanka.Hybrid;
 using Unity.Collections;
@@ -10,7 +9,7 @@ using Hash128 = Unity.Entities.Hash128;
 
 namespace BovineLabs.Timeline.Animation.Authoring
 {
-    internal static class RukhankaAnimationTrackExtensions
+    public static class RukhankaAnimationTrackExtensions
     {
         public static RigDefinitionAuthoring ResolveRigDefinition(this PlayableDirector director, TrackAsset track)
         {
@@ -44,12 +43,18 @@ namespace BovineLabs.Timeline.Animation.Authoring
             this DynamicBuffer<NewBlobAssetDatabaseRecord<AnimationClipBlob>> buffer,
             NativeArray<BlobAssetReference<AnimationClipBlob>> bakedAnimations)
         {
-            foreach (var ba in bakedAnimations.Where(ba => ba != BlobAssetReference<AnimationClipBlob>.Null))
+            // #35: plain foreach over the NativeArray (no LINQ enumerator boxing).
+            foreach (var ba in bakedAnimations)
+            {
+                if (ba == BlobAssetReference<AnimationClipBlob>.Null)
+                    continue;
+
                 buffer.Add(new NewBlobAssetDatabaseRecord<AnimationClipBlob>
                 {
                     hash = ba.Value.hash,
                     value = ba
                 });
+            }
         }
     }
 }
