@@ -28,8 +28,10 @@ namespace BovineLabs.Timeline.Animation
         private NativeParallelHashSet<ulong> _warned;
         private EntityQuery _boneQuery;
         private EntityQuery _clipQuery;
+        private EntityQuery _attachmentQuery;
 
-        [BurstCompile]
+        // Not [BurstCompile]: RequireAnyForUpdate(a, b) allocates a managed EntityQuery[]
+        // (params), which Burst rejects (BC1028). OnCreate runs once — no Burst benefit.
         public void OnCreate(ref SystemState state)
         {
             _bones = new NativeParallelHashMap<RigBoneKey, Entity>(256, Allocator.Persistent);
@@ -40,9 +42,13 @@ namespace BovineLabs.Timeline.Animation
                 .WithAll<ClipActive, TimelineActive, WeaponGripClipData, TrackBinding, DirectorRoot>()
                 .WithAllRW<WeaponAnchorData>()
                 .Build();
+            _attachmentQuery = SystemAPI.QueryBuilder()
+                .WithAll<WeaponAttachment, ObjectId>()
+                .WithAllRW<WeaponAttachmentAnchor>()
+                .Build();
 
             state.RequireForUpdate<WeaponGripRegistry>();
-            state.RequireForUpdate(_clipQuery);
+            state.RequireAnyForUpdate(_clipQuery, _attachmentQuery);
         }
 
         [BurstCompile]
@@ -66,14 +72,39 @@ namespace BovineLabs.Timeline.Animation
                 Bones = _bones.AsParallelWriter()
             }.ScheduleParallel(_boneQuery, state.Dependency);
 
-            state.Dependency = new ResolveGripJob
+            var registry = SystemAPI.GetSingleton<WeaponGripRegistry>().Value;
+
+            var gripHandle = new ResolveGripJob
             {
-                Registry = SystemAPI.GetSingleton<WeaponGripRegistry>().Value,
+                Registry = registry,
                 ObjectIdLookup = SystemAPI.GetComponentLookup<ObjectId>(true),
                 AttachmentLookup = SystemAPI.GetComponentLookup<WeaponAttachment>(true),
                 Bones = _bones,
                 Warned = _warned.AsParallelWriter()
             }.ScheduleParallel(_clipQuery, state.Dependency);
+
+            // Persistent attachments (b): while enabled and no grip clip is sampling the weapon, the resolved
+            // anchor feeds one full-weight sample in WeaponAnchorBlendSystem — the weapon stays in the hand.
+            var attachmentHandle = new ResolveAttachmentJob
+            {
+                Registry = registry,
+                Bones = _bones,
+                Warned = _warned.AsParallelWriter()
+            }.ScheduleParallel(_attachmentQuery, state.Dependency);
+
+            state.Dependency = Unity.Jobs.JobHandle.CombineDependencies(gripHandle, attachmentHandle);
+        }
+
+        /// <summary> Finds the index of <paramref name="key" /> in <paramref name="grips" />, else the default grip; -1 when neither resolves. </summary>
+        internal static int ResolveGripIndex(ref WeaponGrips grips, uint key)
+        {
+            for (var i = 0; i < grips.Grips.Length; i++)
+            {
+                if (grips.Grips[i].Key == key)
+                    return i;
+            }
+
+            return (uint)grips.DefaultGrip < (uint)grips.Grips.Length ? grips.DefaultGrip : -1;
         }
 
         internal struct RigBoneKey : IEquatable<RigBoneKey>
@@ -140,26 +171,17 @@ namespace BovineLabs.Timeline.Animation
                 }
 
                 ref var grips = ref gripsPtr.Ref;
-                var index = -1;
-                for (var i = 0; i < grips.Grips.Length; i++)
-                {
-                    if (grips.Grips[i].Key == clip.Grip)
-                    {
-                        index = i;
-                        break;
-                    }
-                }
-
+                var index = ResolveGripIndex(ref grips, clip.Grip);
                 if (index < 0)
-                {
+                    return;
+
 #if BL_DEBUG
-                    if (clip.Grip != 0 && Warned.Add(((ulong)(uint)objectId.RawValue << 32) | clip.Grip))
-                        UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: clip references a missing grip key; using the weapon's default grip.");
-#endif
-                    index = grips.DefaultGrip;
-                    if ((uint)index >= (uint)grips.Grips.Length)
-                        return;
+                if (grips.Grips[index].Key != clip.Grip && clip.Grip != 0 &&
+                    Warned.Add(((ulong)(uint)objectId.RawValue << 32) | clip.Grip))
+                {
+                    UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: clip references a missing grip key; using the weapon's default grip.");
                 }
+#endif
 
                 ref var grip = ref grips.Grips[index];
 
@@ -172,6 +194,49 @@ namespace BovineLabs.Timeline.Animation
                 }
 
                 if (!Bones.TryGetValue(new RigBoneKey { Rig = holder, Hash = grip.BoneHash }, out var bone))
+                    return;
+
+                anchor.Bone = bone;
+                anchor.LocalPosition = grip.Position;
+                anchor.LocalRotation = grip.Rotation;
+            }
+        }
+
+        /// <summary>
+        /// Resolves the persistent-attachment anchor for every enabled <see cref="WeaponAttachment" /> (query is
+        /// enabled-only by default): attachment grip → bone on the holder's rig. Consumed as a full-weight sample by
+        /// WeaponAnchorBlendSystem while no grip clip covers the weapon.
+        /// </summary>
+        [BurstCompile]
+        private partial struct ResolveAttachmentJob : IJobEntity
+        {
+            [ReadOnly] public BlobAssetReference<WeaponGripRegistryBlob> Registry;
+            [ReadOnly] public NativeParallelHashMap<RigBoneKey, Entity> Bones;
+            public NativeParallelHashSet<ulong>.ParallelWriter Warned;
+
+            private void Execute(in ObjectId objectId, in WeaponAttachment attachment, ref WeaponAttachmentAnchor anchor)
+            {
+                anchor.Bone = Entity.Null;
+
+                if (attachment.Holder == Entity.Null)
+                    return;
+
+                if (!Registry.Value.Weapons.TryGetValue(objectId, out var gripsPtr))
+                {
+#if BL_DEBUG
+                    if (Warned.Add((ulong)(uint)objectId.RawValue << 32))
+                        UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: attached weapon ObjectId has no grips in the registry.");
+#endif
+                    return;
+                }
+
+                ref var grips = ref gripsPtr.Ref;
+                var index = ResolveGripIndex(ref grips, attachment.Grip);
+                if (index < 0)
+                    return;
+
+                ref var grip = ref grips.Grips[index];
+                if (!Bones.TryGetValue(new RigBoneKey { Rig = attachment.Holder, Hash = grip.BoneHash }, out var bone))
                     return;
 
                 anchor.Bone = bone;
