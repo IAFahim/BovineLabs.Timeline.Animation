@@ -1,6 +1,7 @@
 using BovineLabs.Timeline.Data;
 using Unity.Burst;
 using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 using Unity.Entities;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -156,7 +157,12 @@ namespace BovineLabs.Timeline.Animation
             public float DeltaTime;
 
             [ReadOnly] public ComponentLookup<LocalToWorld> LocalToWorldLookup;
-            [ReadOnly] public ComponentLookup<LocalTransform> LocalTransformLookup;
+
+            // Reads only parent/bone entities via BoneWorld's walk — never the executing weapon, whose
+            // LocalTransform is the RW `ref transform` below. Disjoint by construction; the safety system
+            // can't see that a RW type-handle and a same-type lookup never touch the same entity here.
+            [ReadOnly] [NativeDisableContainerSafetyRestriction] public ComponentLookup<LocalTransform> LocalTransformLookup;
+
             [ReadOnly] public ComponentLookup<PostTransformMatrix> PostTransformMatrixLookup;
             [ReadOnly] public ComponentLookup<Parent> ParentLookup;
             [ReadOnly] public ComponentLookup<WeaponAttachment> AttachmentLookup;
