@@ -26,8 +26,11 @@ namespace BovineLabs.Timeline.Animation
             state.RequireForUpdate<BlobDatabaseSingleton>();
 
             // GPU parity guard (#3): actors carrying timeline-animation state (BlendGroupTimer) whose rig is on the
-            // GPU animation path (enabled GPUAnimationEngineTag). The GPU AnimationToProcess struct never gained the
-            // offset/removeStartOffset parity fields, so those features silently no-op there.
+            // GPU animation path (enabled GPUAnimationEngineTag). Position/rotation offsets and removeStartOffset are
+            // now honored on the GPU path (GPUStructures.AnimationToProcess + AnimationToProcess.hlsl parity fields,
+            // forwarded by FillFrameAnimatedRigWorkloadBuffersJob and applied in ProcessAnimations.hlsl's root-bone
+            // path). Inertialization still no-ops for GPU rigs — InertializationSystem reads the CPU worldSpaceBones
+            // buffer and rigFrameData.rigBoneCount is <= 0 for GPU-driven rigs — so the guard now warns only about that.
             _gpuGuardQuery = SystemAPI.QueryBuilder().WithAll<BlendGroupTimer, GPUAnimationEngineTag>().Build();
             _gpuWarned = new NativeReference<bool>(Allocator.Persistent);
         }
@@ -62,8 +65,9 @@ namespace BovineLabs.Timeline.Animation
                 _gpuWarned.Value = true;
                 SystemAPI.GetSingleton<BLLogger>().LogError512(
                     "[TimelineAnimation] A rig on the GPU animation path (GPUAnimationEngineTag) has timeline-animation " +
-                    "state. Timeline-animation features (position/rotation offsets, removeStartOffset, continuous loop, " +
-                    "inertialization) are UNSUPPORTED on the GPU animation engine and will be silently ignored.");
+                    "state. Position/rotation offsets and removeStartOffset are honored on the GPU path, but " +
+                    "inertialization (pose-pop smoothing) is UNSUPPORTED on the GPU animation engine and will be " +
+                    "silently ignored.");
             }
 
             var isScrubbing = false;

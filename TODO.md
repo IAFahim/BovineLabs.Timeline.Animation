@@ -2,19 +2,26 @@
 
 ## Campaign Status
 
-**32 / 35 fully IMPLEMENTED · 3 DEFERRED (SPIKE, partials landed).**
+**34 / 35 fully IMPLEMENTED · 1 DEFERRED (SPIKE, partials landed).**
 
-The audit-implementation campaign is complete. All 35 items were addressed; 32 are fully
-implemented and verified in code. Three are deferred spikes where only the cheap/safe part
-was implemented and the larger port is intentionally left for a dedicated effort:
+The audit-implementation campaign is complete. All 35 items were addressed; 34 are fully
+implemented and verified in code. The remaining one is a deferred spike where only the cheap/safe
+part was implemented and the larger port is intentionally left for a dedicated effort:
 
-- **#3 — GPU `AnimationToProcess` parity.** The runtime/bake-time *guard* (warn when a rig
-  carries timeline-animation components + `GPUAnimationEngineTag`) is implemented; the full
-  HLSL/GPU-struct field port is DEFERRED (SPIKE).
-- **#12 — Single-clip missing-hash + Animation Doctor.** The missing-hash warning parity in
-  the single-clip gather is implemented; the editor "Animation Doctor" diagnosis window is
-  DEFERRED (SPIKE).
+- **#3 — GPU `AnimationToProcess` parity.** ✅ IMPLEMENTED (formerly deferred). Both the guard *and* the full
+  HLSL/GPU-struct field port now landed: `GPUStructures.AnimationToProcess` + `AnimationToProcess.hlsl` gained
+  `positionOffset`/`rotationOffset`/`flags`, `FillFrameAnimatedRigWorkloadBuffersJob` forwards them, and
+  `ProcessAnimations.hlsl`'s root-bone path applies the offset/removeStartOffset math bit-for-bit with the CPU
+  `ComputeBoneAnimationJob`. The guard was narrowed to inertialization (the one feature that genuinely still
+  no-ops on GPU rigs).
 - **#27 — Offsets-contract fork-shrink.** Never assigned; spike-first. DEFERRED (SPIKE).
+
+**#12 — Single-clip missing-hash + Animation Doctor is now fully implemented (formerly deferred):** the
+missing-hash warning parity in the single-clip gather (step 1) plus the editor "Animation Doctor" runtime
+diagnosis window (step 2). `AnimationDoctor` (pure, testable checklist) + `AnimationDoctorWindow` live in the
+Editor assembly, opened from BovineLabs/Animation/Animation Doctor or the "Animation Doctor" button on the
+validator window; it enumerates active `SmoothBlendGroupEntry` rows + the rejected requests and runs the
+silent-failure checklist for a selected actor.
 
 Build/verify state: **all 6 assemblies compile green** (Data, runtime, Debug, Authoring,
 Editor, Tests). EditMode tests are **compile-verified but not run** (no headless Unity runner
@@ -163,6 +170,7 @@ if (isActive && !bodyState.Fired)
 
 ### TODO: Close the CPU/GPU divergence — GPU `AnimationToProcess` lacks the parity fields
 
+**Status:** ✅ IMPLEMENTED (guard + full HLSL/GPU-struct port). See "Resolution" at the end of this section.
 **Priority:** Critical
 **Certainty:** Confirmed
 **Lens:** Architecture / Validation
@@ -177,6 +185,52 @@ if (isActive && !bodyState.Fired)
 **How to Verify:** Toggle `GPUAnimationEngineTag` on the showcase hero → warning fires; after full fix, pose matches CPU path bit-for-bit-ish (visual A/B).
 **Tradeoffs:** HLSL port is real work and needs the shader-debug markers updated; the guard alone removes the silent-failure class.
 **Confidence:** High
+
+**Resolution (implemented):**
+- **GPU struct + HLSL mirror extended.** `GPUStructures.AnimationToProcess` (C#) and `AnimationToProcess.hlsl` both
+  append `float3 positionOffset; float4 rotationOffset; uint flags;` after `avatarMaskDataOffset`. Layout (tight
+  scalar StructuredBuffer packing — the same convention proven by `GPUStructures.BoneTransform` = float3+float4+float3
+  = 40 bytes): base `28` → `positionOffset(12)@28` → `rotationOffset(16)@40` → `flags(4)@56` → **60 bytes total**.
+  The `GraphicsBuffer` stride is `UnsafeUtility.SizeOf<AnimationToProcess>()` (via `FrameFencedGPUBufferPool`), so C#
+  and HLSL agree automatically as long as the field order/types match — which they do.
+- **`flags` encoding:** `bit0 = removeStartOffset`, `bit1 = applyFootIK` (`#define ATP_FLAG_REMOVE_START_OFFSET 1`,
+  `#define ATP_FLAG_APPLY_FOOT_IK 2` in `AnimationToProcess.hlsl`). The GPU offset math only reads
+  `ATP_FLAG_REMOVE_START_OFFSET`; `applyFootIK` is carried for completeness (foot-IK bakes per-blob and already
+  survives on GPU).
+- **Copy in `FillFrameAnimatedRigWorkloadBuffersJob`:** `positionOffset = atp.positionOffset`,
+  `rotationOffset = atp.rotationOffset.value`, `flags = (removeStartOffset?1u:0u) | (applyFootIK?2u:0u)`.
+- **Root-bone math ported into `ProcessAnimations.hlsl`:** inside the `if (SampleAnimation(...))` block, guarded by
+  `boneWorkload.boneIndexInRig == 0` (the GPU analog of the CPU's `rootMotionDeltaBone`, since the GPU engine has no
+  root-motion delta bone) and by a per-ATP `hasOffset` check so non-offset content is byte-for-byte unchanged. Same
+  order of operations as CPU `ComputeBoneAnimationJob`: (1) if `removeStartOffset`, sample the clip at t=0 and
+  `bt = Inverse(startPose) * bt`; (2) `offsetPose = {pos, rot, scale 1}`, `bt = offsetPose * bt`; (3) force
+  `flags.x = flags.y = 1`. CPU `BoneTransform.Multiply/Inverse` (`math.mul`/`math.inverse`/`math.rcp`) are identical
+  to the HLSL `BoneTransform::Multiply/Inverse` (`Quaternion::Rotate`/`Inverse`/`rcp`), so the port matches bit-for-bit.
+- **Shader-debug markers:** none added. The port introduces no new `CHECK_STRUCTURED_BUFFER_OUT_OF_BOUNDS`-guarded
+  StructuredBuffer indexing — the removeStartOffset re-sample goes through `SampleAnimation` → `ReadFromRawBuffer`
+  (raw ByteAddressBuffer, unmarked). `DebugMarkers.cs`/`.cs.hlsl` `Total` count stays valid.
+- **Guard narrowed:** `TimelineAnimationUnificationSystem`'s `GPUAnimationEngineTag` warning no longer claims offsets
+  are unsupported. It now warns only about **inertialization**, which genuinely still no-ops on GPU rigs
+  (`InertializationSystem` reads the CPU `worldSpaceBones` buffer; `rigFrameData.rigBoneCount <= 0` for GPU rigs).
+- **Files changed:** `com.rukhanka.animation/Rukhanka.Runtime/GPUAnimationEngine/GPUStructures.cs`,
+  `.../Common/Shaders/GPUStructures/AnimationToProcess.hlsl`,
+  `.../GPUAnimationEngine/GPUAnimationSystem_Jobs.cs`, `.../GPUAnimationEngine/Resources/ProcessAnimations.hlsl`,
+  `BovineLabs.Timeline.Animation/TimelineAnimationUnificationSystem.cs`.
+- **Verification:** all four affected assemblies (`Rukhanka.Runtime`, `BovineLabs.Timeline.Animation`,
+  `BovineLabs.Timeline.Animation.Tests`, `Rukhanka.Tests`) compile clean (0 errors) via the Unity-bundled dotnet.
+  EditMode tests were compile-verified only — they do not exercise the GPU dispatch path, and this environment has no
+  headless test runner. HLSL cannot be unit-tested here.
+- **Visual A/B verification recipe (do this once on a GPU-capable machine):**
+  1. Author a `RukhankaAnimationTrack`/`BlendTree2DTrack` clip on the showcase hero with a non-identity
+     `positionOffset` (e.g. `(0, 0, 2)`) and/or `eulerAnglesOffset`, on a rig with **Apply Root Motion enabled** (the
+     offsets contract from #2 — CPU only applies offsets on root-motion rigs, so the A/B must use one).
+  2. Play with the rig on the **CPU** path (no `GPUAnimationEngineTag`); note the character's root pose/position at a
+     fixed timeline point (screenshot).
+  3. Add `GPUAnimationEngineTag` to the rig (flip it to the GPU animation engine); replay to the same timeline point.
+  4. **Pass:** the root pose/position matches the CPU screenshot (offset applied identically); with
+     `removeStartOffset` set, the clip starts from the offset position on both paths. **Before this fix** the GPU pose
+     ignored the offset (character sat at the un-offset pose). Confirm the runtime warning now mentions only
+     inertialization, not offsets.
 
 ---
 
@@ -663,6 +717,10 @@ if (!Bodies.TryGetComponent(pair.EntityA, out var body) &&
 **Problem:** The silent-failure paths enumerated in this audit (offsets w/o root motion, missing rig binding, missing blob hash, layer-weight orphan, GPU tag, culled rig, zero-weight, mask excludes bone) all end in "nothing happens". The Quill overlay shows *what is* playing but not *why something isn't*. Per the designer-tooling-plan memory, ~80 % of designer pain is silent failure.
 **Suggested Change:** Add an editor "Animation Doctor" pass (menu or button on the validator window) that, for a selected actor at runtime: dumps active `SmoothBlendGroupEntry` rows (already visible), plus the *rejected* requests — extend the `BlobDatabaseSingleton` misses (the "Animation hash not found" warnings already exist in blend trees; add the same to `TimelineSingleAnimationTrackSystem.GatherActiveClipsJob`, which currently drops missing hashes **silently** — note: that gather job returns without logging when `AnimDB.TryGetValue` fails, unlike the blend trees; fix that asymmetry regardless).
 **Implementation Path:** 1) Add the missing-hash warning to the single-clip gather (parity with blend trees, ~5 lines). 2) Doctor window enumerating the checklist above against a selected entity.
+**Status:** ✅ IMPLEMENTED. Step 1 landed earlier (`GatherActiveClipsJob` now `LogWarning512`s on a blob miss). Step 2 is the Animation Doctor, in the Editor assembly:
+- `AnimationDoctor.cs` — pure, UnityEditor-free diagnosis engine: `ActorDiagnostic` snapshot in → `List<DoctorFinding>` out, one `internal static Check*` per silent-failure path so every check is unit-tested without a window or live world (`AnimationDoctorTests`, 22 tests).
+- `AnimationDoctorWindow.cs` — the window: enumerates default-world actors (entities with `BlendGroupTimer`), captures one actor's live blend state read-only on the main thread (SmoothBlendGroupEntry rows, active single/1D/2D/Direct clip requests, LayerWeightOverride, rig/GPU/cull facts, blob-DB hash + avatar-mask resolution) and renders the findings + an entry/request dump. Opened from `BovineLabs/Animation/Animation Doctor` or the **Animation Doctor** toolbar button on the validator window.
+- Checks implemented (each maps to a `DoctorCode`): (a) offsets authored but rig root-motion OFF, (b) missing/disabled rig binding (+ "not an animation actor"), (c) animation blob hash not in AnimDB (single-clip **and** blend-tree motions), (d) LayerWeight override targeting an unused layer / fading a layer to 0, (e) `GPUAnimationEngineTag` with package components, (f) rig culled, (g) zero effective weight (+ per-request zero clip weight), (h) avatar mask that includes 0 bones / missing mask blob, plus the empty-blend-tree and missing-track-data rejections and an idle "no active clips" note.
 **Confidence:** High (the missing-hash logging asymmetry is Confirmed)
 
 ### TODO: Quill debug draws — keep the per-frame cost gated
@@ -813,7 +871,7 @@ internal static class BlendTreeGatherCore
 |---|---|---|---|
 | 1 | Re-enable ragdoll activation pose snap (`if (false && …)`) | Critical | ✅ IMPLEMENTED |
 | 2 | Offsets/removeStartOffset only work with root motion — validate + decide contract | Critical | ✅ IMPLEMENTED |
-| 3 | GPU engine ignores parity fields — guard now, port later | Critical | 🔲 DEFERRED (SPIKE) — guard done, HLSL port deferred |
+| 3 | GPU engine ignores parity fields — guard + full HLSL/GPU-struct port | Critical | ✅ IMPLEMENTED — struct+HLSL mirror (60 B), fill-job copy, root-bone offset/removeStartOffset math in `ProcessAnimations.hlsl`, guard narrowed to inertialization |
 | 4 | Inertialization phase-jump false positives under dt jitter + dominance hysteresis | High | ✅ IMPLEMENTED |
 | 5 | Weapon Equip accumulation + Drop can't target spawned weapon | High | ✅ IMPLEMENTED |
 | 6 | Inertialization + unification reconcile test coverage | High | ✅ IMPLEMENTED |
@@ -822,7 +880,7 @@ internal static class BlendTreeGatherCore
 | 9 | Blend-tree phase clock has no reverse-playback support | High | ✅ IMPLEMENTED |
 | 10 | Fallback clock + weight ramps ignore timeline/world time scale | High | ✅ IMPLEMENTED |
 | 11 | WeaponAnchorBlendSystem LocalTransform aliasing — split compute/apply | High | ✅ IMPLEMENTED |
-| 12 | Single-clip gather drops missing blob hashes silently (parity with blend trees) + Animation Doctor | Medium | 🔲 DEFERRED (SPIKE) — missing-hash parity done, Doctor window deferred |
+| 12 | Single-clip gather drops missing blob hashes silently (parity with blend trees) + Animation Doctor | Medium | ✅ IMPLEMENTED (`AnimationDoctor` + `AnimationDoctorWindow`) |
 | 13 | Validator coverage for 1D/Direct/LayerWeight/WeaponGrip/AfterImage/LookAt/empty-motions/negative layers | Medium | ✅ IMPLEMENTED |
 | 14 | ExitIdleClip tooltip vs restore-on-inactive behavior mismatch | Medium | ✅ IMPLEMENTED |
 | 15 | Early-out timeline animation work for culled rigs | Medium | ✅ IMPLEMENTED |

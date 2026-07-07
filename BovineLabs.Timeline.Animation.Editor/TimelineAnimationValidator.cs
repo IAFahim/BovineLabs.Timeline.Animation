@@ -859,6 +859,13 @@ namespace BovineLabs.Timeline.Animation.Editor
                         Rescan();
                     }
 
+                    // Runtime companion: the validator catches authoring foot-guns; the Doctor explains why a clip is
+                    // silently doing nothing for a selected actor at runtime.
+                    if (GUILayout.Button("Animation Doctor", EditorStyles.toolbarButton, GUILayout.Width(130)))
+                    {
+                        AnimationDoctorWindow.Open();
+                    }
+
                     GUILayout.FlexibleSpace();
                     GUILayout.Label($"{findings.Count} finding(s)", EditorStyles.miniLabel);
                 }

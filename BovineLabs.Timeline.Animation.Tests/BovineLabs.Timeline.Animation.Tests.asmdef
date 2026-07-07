@@ -8,6 +8,7 @@
     "BovineLabs.Timeline",
     "BovineLabs.Timeline.Animation",
     "BovineLabs.Timeline.Animation.Data",
+    "BovineLabs.Timeline.Animation.Editor",
     "BovineLabs.Timeline.Data",
     "BovineLabs.Reaction.Data",
     "BovineLabs.Timeline.EntityLinks.Data",
