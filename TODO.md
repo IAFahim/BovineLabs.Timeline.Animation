@@ -2,11 +2,11 @@
 
 ## Campaign Status
 
-**34 / 35 fully IMPLEMENTED · 1 DEFERRED (SPIKE, partials landed).**
+**34 / 35 fully IMPLEMENTED · 1 SPIKE complete (#27 — prototype + verdict ADOPT, fork edit staged).**
 
 The audit-implementation campaign is complete. All 35 items were addressed; 34 are fully
-implemented and verified in code. The remaining one is a deferred spike where only the cheap/safe
-part was implemented and the larger port is intentionally left for a dedicated effort:
+implemented and verified in code. The remaining one is a completed spike whose final one-line
+fork edit is intentionally staged for a dedicated merge:
 
 - **#3 — GPU `AnimationToProcess` parity.** ✅ IMPLEMENTED (formerly deferred). Both the guard *and* the full
   HLSL/GPU-struct field port now landed: `GPUStructures.AnimationToProcess` + `AnimationToProcess.hlsl` gained
@@ -14,7 +14,11 @@ part was implemented and the larger port is intentionally left for a dedicated e
   `ProcessAnimations.hlsl`'s root-bone path applies the offset/removeStartOffset math bit-for-bit with the CPU
   `ComputeBoneAnimationJob`. The guard was narrowed to inertialization (the one feature that genuinely still
   no-ops on GPU rigs).
-- **#27 — Offsets-contract fork-shrink.** Never assigned; spike-first. DEFERRED (SPIKE).
+- **#27 — Offsets-contract fork-shrink.** SPIKE DONE — verdict **ADOPT (staged)**. Prototype built and
+  math-verified (17/17): a package-owned `AnimationRootOffsetSystem` composes the weighted offset onto bone 0
+  outside the fork; the fork patch shrinks to `removeStartOffset` only. The one-line fork edit itself is left
+  for the merge that lands alongside the concurrent GPU-parity work (the fork is a separate submodule, and the
+  ATP parity fields stay so the GPU HLSL keeps its data). See #27 detail + row 27.
 
 **#12 — Single-clip missing-hash + Animation Doctor is now fully implemented (formerly deferred):** the
 missing-hash warning parity in the single-clip gather (step 1) plus the editor "Animation Doctor" runtime
@@ -694,6 +698,64 @@ if (!Bodies.TryGetComponent(pair.EntityA, out var body) &&
 **Tradeoffs:** Per-ATP weighting of offsets (two clips, different offsets, crossfading) needs the per-clip weights, which ARE in the stream's ATP buffer — feasible. If it works, the fork diff shrinks to the parity struct fields only.
 **Confidence:** Medium
 
+---
+
+#### SPIKE RESULT (2026-07-07) — VERDICT: **ADOPT (staged)**
+
+Prototype built and math-verified; the fork edit is specified exactly and staged for the GPU-parity merge.
+
+**What was built (in the worktree, compiles + tested):**
+- `BovineLabs.Timeline.Animation.Data/AnimationRootOffsetMath.cs` — pure Burst math: `RootOffsetAccumulator`
+  (weight-normalized blend of the active clips' offsets) + `ComposeOntoRoot` (mirrors the fork's
+  `BoneTransform.Multiply(offsetPose, bonePose)`) + `IsIdentityOffset` (zero-offset no-op guard).
+- `BovineLabs.Timeline.Animation/AnimationRootOffsetSystem.cs` — package-owned `ISystem` in
+  `RukhankaAnimationSystemGroup`, `[UpdateAfter(RukhankaAnimationInjectionSystemGroup)]`
+  `[UpdateBefore(InertializationSystem)]` (the proven `InertializationSystem` slot: post pose+IK, pre skinning).
+  Reads each clip's `positionOffset`/`rotationOffset` + `weight` from the ATP buffer, blends them, and composes
+  the result onto bone 0 via `AnimationStream.SetLocalPose(0, …)`. Excludes GPU rigs by construction
+  (`WithDisabled<GPUAnimationEngineTag>`).
+- `BovineLabs.Timeline.Animation.Tests/AnimationRootOffsetMathTests.cs` — 17 tests, **17/17 green** (run via
+  Roslyn+mono here; no Unity runner in this env). Locks: fork-parity of the compose formula, single-clip →
+  unchanged offset, crossfade blends by weight (incl. identity-offset dilution), zero-offset no-op, hemisphere
+  handling.
+
+**Fork edit (STAGED — one file, applied at merge, NOT done in this worktree because the Rukhanka fork is a
+separate submodule outside the sandbox):** in
+`com.rukhanka.animation/.../AnimationProcessSystem_Jobs.cs` the ~35-line offset patch in `ComputeBoneAnimationJob`
+collapses to the ~10-line `removeStartOffset`-only reshape (drop the `offsetPose` composition and the forced
+`flags.x/y = 1`). The ATP struct parity fields (`positionOffset`/`rotationOffset`/`removeStartOffset`) STAY —
+the new CPU system reads them AND the concurrent GPU HLSL port reads them, so keeping them is correct and
+collision-free. **Fork diff: before = parity fields + ~35-line patch in the hottest job; after = parity fields
+(unchanged) + ~10-line removeStartOffset reshape.**
+
+**Root-motion delta interaction (the called-out hard part):** the old fork applied the offset to the root-motion
+DELTA bone *before* `ProcessRootMotionDeltas` computes a frame-to-frame delta (`inv(prev)·cur`). A constant
+offset appears on both `prev` and `cur` and **cancels exactly** — so the offset was near-degenerate even on
+root-motion rigs (net entity movement ≈ 0, only a one-frame spike when the offset value changes). The redesign
+therefore does NOT (and should not) reproduce that delta behavior; it gives offsets a well-defined VISUAL root
+offset instead, which is what Critical #2 wanted (offsets that actually work). `removeStartOffset` is genuinely a
+delta concept (subtract the clip's start root pose so root motion begins from the current position) and stays in
+the shrunk fork patch — it has no meaning outside the delta.
+
+**Crossfade weighting:** the new system weights each clip's offset by the same ATP `weight` the pose blend uses.
+EXACT for the single-clip / shared-offset case (the dominant case, parity-tested); a well-defined
+weighted-average for differing-offset crossfades (the fork's per-clip pose-entangled blend is unreconstructable
+once poses are blended — but no content authors offsets, so this is moot and the approximation is tested).
+
+**GPU-path interaction (honest):** the outside-fork approach writes the CPU `animatedBonesBuffer`, which the GPU
+animation engine NEVER populates. **It does NOT cover GPU-animated rigs** — those still need the offset applied
+inside the GPU pipeline (`GPUStructures.AnimationToProcess` + `ProcessAnimations.hlsl`, the concurrent agent's
+work). This does not regress GPU behavior (offsets were already a silent no-op there, guarded by #3) and does not
+collide with that work because the shared ATP parity fields are retained.
+
+**Why safe to adopt on current content:** every sample rig sets `applyRootMotion = false` and no sample authors a
+non-zero offset, so the old fork patch never fires today and the new system is a no-op today — zero regression —
+while enabling the feature going forward on all CPU rigs.
+
+**Residual before flipping the default on:** a play-mode A/B on a root-motion rig with a real non-zero offset
+(the only case whose behavior changes), and a decision on whether `removeStartOffset` should eventually become a
+bake-time transform (would empty the fork patch entirely) — left for the milestone that lands the fork edit.
+
 ### TODO: `TimelineAnimationStateAuthoring.Baker.singleClipBuffer` instance-field scratch state
 
 **Priority:** Low
@@ -895,7 +957,7 @@ internal static class BlendTreeGatherCore
 | 24 | RequireForUpdate/early-outs on always-running systems | Medium | ✅ IMPLEMENTED (this pass) |
 | 25 | WeaponGripSettings zero-ID + duplicate-ID clarity | Medium | ✅ IMPLEMENTED |
 | 26 | Editor preview parity matrix (+ optionally Inertialization in preview) | Medium | ✅ IMPLEMENTED |
-| 27 | Offsets contract home: shrink the Rukhanka fork patch | Medium | 🔲 DEFERRED (SPIKE) — never assigned, spike-first |
+| 27 | Offsets contract home: shrink the Rukhanka fork patch | Medium | 🟡 SPIKE DONE — **ADOPT (staged)**; `AnimationRootOffsetSystem` + `AnimationRootOffsetMath` built, 17/17 math tests green; fork edit specified (patch → removeStartOffset-only, parity fields kept for GPU), applied at the GPU-parity merge. CPU-only (GPU rigs still need the HLSL port). |
 | 28 | Consolidate the six design/review docs | Medium | ✅ IMPLEMENTED (this pass — `Documentation~/Architecture.md`) |
 | 29 | Ragdoll one-fixed-step activation skew — document or unify through ECB | Low | ✅ IMPLEMENTED (documented) |
 | 30 | WeaponPoseVelocity single-frame differentiation — smooth for drop | Low | ✅ IMPLEMENTED |
