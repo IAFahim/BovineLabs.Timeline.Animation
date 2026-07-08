@@ -27,9 +27,20 @@ namespace BovineLabs.Timeline.Animation
             public Entity ClipEntity;
         }
 
+        /// <summary> Present only while the ghost is alive. Because <see cref="AfterImageGhostOwner"/> is a cleanup
+        /// component, an externally destroyed ghost lingers as a corpse that still passes
+        /// <c>EntityManager.Exists</c>; the absence of this (regular) tag is how a corpse is detected. </summary>
+        private struct AfterImageGhostAlive : IComponentData
+        {
+        }
+
         public void OnCreate(ref SystemState state)
         {
-            state.RequireForUpdate<AfterImageClipData>();
+            // Ghosts (including cleanup-pending corpses) must keep the system updating even after the last clip
+            // is torn down, otherwise orphan reconciliation never runs and zombies leak.
+            var clips = SystemAPI.QueryBuilder().WithAll<AfterImageClipData>().Build();
+            var ghosts = SystemAPI.QueryBuilder().WithAll<AfterImageGhostOwner>().Build();
+            state.RequireAnyForUpdate(clips, ghosts);
         }
 
         public void OnUpdate(ref SystemState state)
@@ -57,8 +68,11 @@ namespace BovineLabs.Timeline.Animation
                 {
                     // Ghost still alive: nothing to do. Ghost destroyed externally (prefab lifetime, scene unload,
                     // gameplay cleanup): clear the stale pointer so the clip is honest — it may respawn while the clip
-                    // is still active, matching the "ghost per activation" intent.
-                    if (state.EntityManager.Exists(spawned)) continue;
+                    // is still active, matching the "ghost per activation" intent. NOTE: an externally destroyed ghost
+                    // still Exists() as a cleanup-pending corpse (AfterImageGhostOwner is ICleanupComponentData), so
+                    // liveness is the alive tag, not existence; the corpse itself is finalized by reconcile below.
+                    if (state.EntityManager.Exists(spawned) &&
+                        state.EntityManager.HasComponent<AfterImageGhostAlive>(spawned)) continue;
                     ecb.SetComponent(entity, new AfterImageClipData { SpawnedEntity = Entity.Null });
                 }
 
@@ -121,6 +135,7 @@ namespace BovineLabs.Timeline.Animation
 #endif
 
                 ecb.AddComponent(instance, new AfterImageGhostOwner { ClipEntity = req.ClipEntity });
+                ecb.AddComponent<AfterImageGhostAlive>(instance);
 
                 ecb.SetComponent(req.ClipEntity, new AfterImageClipData
                 {
@@ -144,8 +159,11 @@ namespace BovineLabs.Timeline.Animation
 
                 if (state.EntityManager.Exists(spawnedEntity))
                 {
+                    // Removing the cleanup component from a corpse finalizes its destruction, so only a live ghost
+                    // may also be destroyed (a second DestroyEntity on the finalized corpse would throw at playback).
                     ecb.RemoveComponent<AfterImageGhostOwner>(spawnedEntity);
-                    ecb.DestroyEntity(spawnedEntity);
+                    if (state.EntityManager.HasComponent<AfterImageGhostAlive>(spawnedEntity))
+                        ecb.DestroyEntity(spawnedEntity);
                 }
 
                 ecb.SetComponent(entity, new AfterImageClipData { SpawnedEntity = Entity.Null });
@@ -160,13 +178,20 @@ namespace BovineLabs.Timeline.Animation
             {
                 var clipEntity = owner.ValueRO.ClipEntity;
 
-                if (state.EntityManager.Exists(clipEntity) &&
-                    SystemAPI.HasComponent<AfterImageClipData>(clipEntity) &&
-                    SystemAPI.GetComponent<AfterImageClipData>(clipEntity).SpawnedEntity == entity)
-                    continue;
+                // A corpse (externally destroyed, cleanup pending) must always be finalized — even when its clip
+                // still points at it, because CollectAndSpawn clears/respawns that pointer this same update.
+                var isCorpse = !SystemAPI.HasComponent<AfterImageGhostAlive>(entity);
 
+                var isOwned = state.EntityManager.Exists(clipEntity) &&
+                              SystemAPI.HasComponent<AfterImageClipData>(clipEntity) &&
+                              SystemAPI.GetComponent<AfterImageClipData>(clipEntity).SpawnedEntity == entity;
+
+                if (!isCorpse && isOwned) continue;
+
+                // Removing the cleanup component finalizes a corpse; a live orphan additionally needs the destroy.
                 ecb.RemoveComponent<AfterImageGhostOwner>(entity);
-                ecb.DestroyEntity(entity);
+                if (!isCorpse)
+                    ecb.DestroyEntity(entity);
             }
         }
     }

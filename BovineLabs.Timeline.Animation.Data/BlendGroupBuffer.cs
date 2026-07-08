@@ -56,6 +56,11 @@ namespace BovineLabs.Timeline.Animation
         public bool ContinuousLoop;
         public float PhaseVelocity;
         public bool PhaseSeeded;
+
+        // Transient: set on the frame the phase is (re)seeded so IntegrateWeights skips the free-run advance that
+        // same frame — the first rendered frame lands EXACTLY on the requested seed, and advancing starts next
+        // frame. Cleared as soon as the advance is skipped, so it never persists across frames.
+        public bool PhaseJustSeeded;
     }
 
     public struct BlendGroupTimer : IComponentData

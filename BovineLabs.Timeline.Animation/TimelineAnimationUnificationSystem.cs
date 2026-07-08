@@ -221,7 +221,10 @@ namespace BovineLabs.Timeline.Animation
                         {
                             s.NormalizedTime = request.NormalizedTime;
                             if (s.ContinuousLoop && !isScrubbing)
+                            {
                                 s.PhaseSeeded = true;
+                                s.PhaseJustSeeded = true; // hold the seeded phase for this frame; advance starts next frame
+                            }
                         }
 
                         s.LayerIndex = request.LayerIndex;
@@ -258,7 +261,8 @@ namespace BovineLabs.Timeline.Animation
                             // considered seeded immediately so subsequent frames own NormalizedTime themselves.
                             ContinuousLoop = request.ContinuousLoop,
                             PhaseVelocity = request.PhaseVelocity,
-                            PhaseSeeded = request.ContinuousLoop
+                            PhaseSeeded = request.ContinuousLoop,
+                            PhaseJustSeeded = request.ContinuousLoop // first frame renders the seed; advance next frame
                         });
                     }
                 }
@@ -303,8 +307,17 @@ namespace BovineLabs.Timeline.Animation
                         // Continuous-phase loop: advance this entry's OWN phase by PhaseVelocity (cycles/sec) every
                         // frame and never read the wrapping timeline localTime, so the loop seam is invisible
                         // regardless of timeline duration. Runs whether rising, held, or fading out.
-                        var adv = (IsScrubbing ? 0f : DeltaTime) * s.PhaseVelocity;
-                        s.NormalizedTime = math.frac(s.NormalizedTime + adv);
+                        if (s.PhaseJustSeeded)
+                        {
+                            // Seeded this frame: render exactly the requested phase and defer the first advance,
+                            // so spawn does not skip half a frame. Advancing resumes next frame.
+                            s.PhaseJustSeeded = false;
+                        }
+                        else
+                        {
+                            var adv = (IsScrubbing ? 0f : DeltaTime) * s.PhaseVelocity;
+                            s.NormalizedTime = math.frac(s.NormalizedTime + adv);
+                        }
                     }
                     else if (s.TargetWeight <= WeightEpsilon && hasClip)
                     {
