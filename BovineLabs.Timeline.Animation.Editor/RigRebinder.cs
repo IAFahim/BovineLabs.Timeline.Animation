@@ -124,7 +124,7 @@ namespace BovineLabs.Timeline.Animation.Editor
 
             IEnumerable<PlayableDirector> directors = this.searchRoot != null
                 ? this.searchRoot.GetComponentsInChildren<PlayableDirector>(true)
-                : Object.FindObjectsByType<PlayableDirector>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                : Object.FindObjectsByType<PlayableDirector>(FindObjectsInactive.Include);
 
             foreach (var director in directors)
             {

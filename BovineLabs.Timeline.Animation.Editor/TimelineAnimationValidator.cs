@@ -59,7 +59,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             var directorByTimeline = new Dictionary<TimelineAsset, PlayableDirector>();
 
             // PlayableDirectors in loaded scenes.
-            var directors = Object.FindObjectsByType<PlayableDirector>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var directors = Object.FindObjectsByType<PlayableDirector>(FindObjectsInactive.Include);
             foreach (var director in directors)
             {
                 if (director.playableAsset is TimelineAsset timeline)
@@ -87,7 +87,7 @@ namespace BovineLabs.Timeline.Animation.Editor
             }
 
             // TimelineAnimationStateAuthoring components in loaded scenes (D#3 foot-gun, D#5 dup-blob).
-            var states = Object.FindObjectsByType<TimelineAnimationStateAuthoring>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var states = Object.FindObjectsByType<TimelineAnimationStateAuthoring>(FindObjectsInactive.Include);
             foreach (var state in states)
             {
                 ScanState(state, findings);
