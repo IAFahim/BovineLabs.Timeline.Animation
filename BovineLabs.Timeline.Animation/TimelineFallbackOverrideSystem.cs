@@ -20,6 +20,8 @@ namespace BovineLabs.Timeline.Animation
         private NativeParallelMultiHashMap<Entity, TrackFallbackOverride> _candidates;
         private NativeList<Entity> _targets;
         private EntityQuery _activeClips;
+        private UnsafeComponentLookup<TrackFallbackOverride> _trackOverrides;
+        private ComponentLookup<FallbackBlend> _fallbacks;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
@@ -33,6 +35,9 @@ namespace BovineLabs.Timeline.Animation
             // component (not the transient override query): the RestoreFallbackJob still runs on the frame an override
             // clip disappears (an actor keeps its FallbackBlend), so the reconcile-to-default path is preserved.
             state.RequireForUpdate<FallbackBlend>();
+
+            _trackOverrides = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true);
+            _fallbacks = state.GetComponentLookup<FallbackBlend>();
         }
 
         [BurstCompile]
@@ -49,9 +54,12 @@ namespace BovineLabs.Timeline.Animation
             if (_candidates.Capacity < count) _candidates.Capacity = count;
             _candidates.Clear();
 
+            _trackOverrides.Update(ref state);
+            _fallbacks.Update(ref state);
+
             state.Dependency = new GatherOverridesJob
             {
-                TrackOverrides = state.GetUnsafeComponentLookup<TrackFallbackOverride>(true),
+                TrackOverrides = _trackOverrides,
                 Candidates = _candidates.AsParallelWriter()
             }.ScheduleParallel(state.Dependency);
 
@@ -65,7 +73,7 @@ namespace BovineLabs.Timeline.Animation
             {
                 Targets = _targets.AsDeferredJobArray(),
                 Candidates = _candidates,
-                Fallbacks = state.GetComponentLookup<FallbackBlend>()
+                Fallbacks = _fallbacks
             }.Schedule(_targets, 32, state.Dependency);
 
             state.Dependency = new RestoreFallbackJob
