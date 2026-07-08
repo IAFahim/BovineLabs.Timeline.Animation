@@ -29,7 +29,9 @@
         "Unity.Physics.Custom",
         "Unity.Timeline",
         "BovineLabs.Essence.Authoring",
-        "BovineLabs.Essence.Data"
+        "BovineLabs.Essence.Data",
+        "BovineLabs.Nerve",
+        "BovineLabs.Nerve.Authoring"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,6 +1,6 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
 using BovineLabs.Core.Collections;
-using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Nerve.ObjectManagement;
 using NUnit.Framework;
 using Rukhanka.Toolbox;
 using Unity.Collections;

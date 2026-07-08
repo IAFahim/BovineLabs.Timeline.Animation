@@ -21,7 +21,8 @@
         "Unity.Physics",
         "Unity.Transforms",
         "Unity.Timeline",
-        "BovineLabs.Essence.Data"
+        "BovineLabs.Essence.Data",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

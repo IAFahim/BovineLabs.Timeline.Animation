@@ -1,6 +1,6 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
 using System;
-using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Nerve.ObjectManagement;
 using BovineLabs.Timeline.Data;
 using Rukhanka;
 using Unity.Burst;
@@ -178,7 +178,7 @@ namespace BovineLabs.Timeline.Animation
                 if (!Registry.Value.Weapons.TryGetValue(objectId, out var gripsPtr))
                 {
 #if BL_DEBUG
-                    if (Warned.Add((ulong)(uint)objectId.RawValue << 32))
+                    if (Warned.Add((ulong)(uint)objectId.Value.RawValue << 32))
                         UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: weapon ObjectId has no grips in the registry.");
 #endif
                     return;
@@ -191,7 +191,7 @@ namespace BovineLabs.Timeline.Animation
 
 #if BL_DEBUG
                 if (grips.Grips[index].Key != clip.Grip && clip.Grip != 0 &&
-                    Warned.Add(((ulong)(uint)objectId.RawValue << 32) | clip.Grip))
+                    Warned.Add(((ulong)(uint)objectId.Value.RawValue << 32) | clip.Grip))
                 {
                     UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: clip references a missing grip key; using the weapon's default grip.");
                 }
@@ -238,7 +238,7 @@ namespace BovineLabs.Timeline.Animation
                 if (!Registry.Value.Weapons.TryGetValue(objectId, out var gripsPtr))
                 {
 #if BL_DEBUG
-                    if (Warned.Add((ulong)(uint)objectId.RawValue << 32))
+                    if (Warned.Add((ulong)(uint)objectId.Value.RawValue << 32))
                         UnityEngine.Debug.LogWarning("WeaponGripSampleSystem: attached weapon ObjectId has no grips in the registry.");
 #endif
                     return;

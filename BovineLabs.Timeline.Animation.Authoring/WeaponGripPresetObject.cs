@@ -1,6 +1,6 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
 using System;
-using BovineLabs.Core.Authoring.ObjectManagement;
+using BovineLabs.Nerve.Authoring.ObjectManagement;
 using UnityEngine;
 
 namespace BovineLabs.Timeline.Animation.Authoring

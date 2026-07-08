@@ -14,7 +14,8 @@
         "Unity.Mathematics",
         "Rukhanka.Runtime",
         "Unity.Timeline",
-        "BovineLabs.Essence.Data"
+        "BovineLabs.Essence.Data",
+        "BovineLabs.Nerve"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

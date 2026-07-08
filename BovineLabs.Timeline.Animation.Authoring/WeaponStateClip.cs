@@ -1,6 +1,6 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
 using BovineLabs.Core.Authoring.EntityCommands;
-using BovineLabs.Core.Authoring.ObjectManagement;
+using BovineLabs.Nerve.Authoring.ObjectManagement;
 using BovineLabs.Timeline.Animation.Data.Builders;
 using BovineLabs.Timeline.Authoring;
 using Rukhanka.Toolbox;

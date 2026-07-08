@@ -1,6 +1,6 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
 using System.Collections.Generic;
-using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Nerve.ObjectManagement;
 using BovineLabs.Testing;
 using BovineLabs.Timeline.Data;
 using NUnit.Framework;

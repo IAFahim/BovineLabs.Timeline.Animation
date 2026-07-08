@@ -30,7 +30,8 @@
         "Rukhanka.Runtime",
         "Rukhanka.Hybrid",
         "BovineLabs.Timeline.EntityLinks.Authoring",
-        "BovineLabs.Essence.Data"
+        "BovineLabs.Essence.Data",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [
         "Editor"

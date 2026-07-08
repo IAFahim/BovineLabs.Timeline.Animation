@@ -1,5 +1,5 @@
 #if !BL_DISABLE_OBJECT_DEFINITION
-using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Nerve.ObjectManagement;
 using BovineLabs.Timeline.Data;
 using Unity.Burst;
 using Unity.Collections;

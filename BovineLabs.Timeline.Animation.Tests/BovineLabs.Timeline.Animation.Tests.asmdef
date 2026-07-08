@@ -1,42 +1,43 @@
 {
-  "name": "BovineLabs.Timeline.Animation.Tests",
-  "rootNamespace": "",
-  "references": [
-    "BovineLabs.Core",
-    "BovineLabs.Core.Extensions",
-    "BovineLabs.Testing",
-    "BovineLabs.Timeline",
-    "BovineLabs.Timeline.Animation",
-    "BovineLabs.Timeline.Animation.Data",
-    "BovineLabs.Timeline.Animation.Editor",
-    "BovineLabs.Timeline.Data",
-    "BovineLabs.Reaction.Data",
-    "BovineLabs.Timeline.EntityLinks.Data",
-    "Rukhanka.Runtime",
-    "Rukhanka.Toolbox",
-    "Unity.Burst",
-    "Unity.Collections",
-    "Unity.Entities",
-    "Unity.Mathematics",
-    "Unity.Transforms",
-    "Unity.Physics",
-    "Unity.Timeline",
-    "UnityEngine.TestRunner",
-    "UnityEditor.TestRunner"
-  ],
-  "includePlatforms": [
-    "Editor"
-  ],
-  "excludePlatforms": [],
-  "allowUnsafeCode": true,
-  "overrideReferences": true,
-  "precompiledReferences": [
-    "nunit.framework.dll"
-  ],
-  "autoReferenced": false,
-  "defineConstraints": [
-    "UNITY_INCLUDE_TESTS"
-  ],
-  "versionDefines": [],
-  "noEngineReferences": false
+    "name": "BovineLabs.Timeline.Animation.Tests",
+    "rootNamespace": "",
+    "references": [
+        "BovineLabs.Core",
+        "BovineLabs.Core.Extensions",
+        "BovineLabs.Testing",
+        "BovineLabs.Timeline",
+        "BovineLabs.Timeline.Animation",
+        "BovineLabs.Timeline.Animation.Data",
+        "BovineLabs.Timeline.Animation.Editor",
+        "BovineLabs.Timeline.Data",
+        "BovineLabs.Reaction.Data",
+        "BovineLabs.Timeline.EntityLinks.Data",
+        "Rukhanka.Runtime",
+        "Rukhanka.Toolbox",
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Entities",
+        "Unity.Mathematics",
+        "Unity.Transforms",
+        "Unity.Physics",
+        "Unity.Timeline",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "BovineLabs.Nerve"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
 }

@@ -30,7 +30,7 @@ namespace BovineLabs.Timeline.Animation
     /// <summary> Registry of every weapon's grips, keyed by its ObjectDefinition id. </summary>
     public struct WeaponGripRegistryBlob
     {
-        public BlobHashMap<BovineLabs.Core.ObjectManagement.ObjectId, WeaponGrips> Weapons;
+        public BlobHashMap<BovineLabs.Nerve.ObjectManagement.ObjectId, WeaponGrips> Weapons;
     }
 
     /// <summary> Singleton wrapping <see cref="WeaponGripRegistryBlob" />, baked by WeaponGripSettings. </summary>

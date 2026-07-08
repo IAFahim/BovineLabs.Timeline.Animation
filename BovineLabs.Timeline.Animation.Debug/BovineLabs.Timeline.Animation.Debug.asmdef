@@ -15,7 +15,8 @@
         "Unity.Entities",
         "Unity.Mathematics",
         "Unity.Transforms",
-        "BovineLabs.Essence.Data"
+        "BovineLabs.Essence.Data",
+        "BovineLabs.Nerve"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

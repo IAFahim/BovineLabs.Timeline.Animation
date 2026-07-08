@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using BovineLabs.Core.Authoring.Settings;
 using BovineLabs.Core.Collections;
-using BovineLabs.Core.ObjectManagement;
+using BovineLabs.Nerve.ObjectManagement;
 using BovineLabs.Core.Settings;
 using Rukhanka.Toolbox;
 using Unity.Collections;
